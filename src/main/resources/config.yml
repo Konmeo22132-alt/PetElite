@@ -1,0 +1,55 @@
+# PetPlugin Configuration
+
+# ELO Settings
+elo:
+  k-factor: 32
+  default-elo: 500
+
+# Battle Settings
+battle:
+  turn-timeout-seconds: 30
+  # freeze players in place during battle (arena teleport placeholder)
+  freeze-players: true
+
+# Quest Targets
+quests:
+  daily:
+    MINE_ORE: 32
+    WALK_BLOCKS: 500
+    KILL_PLAYERS: 3
+  weekly:
+    KILL_BOSS: 2
+    WIN_BATTLES: 5
+    LONG_JOURNEY: 5000
+    CRAFT_RARE: 10
+    JOIN_EVENTS: 3
+
+# Quest EXP Rewards
+quest-rewards:
+  daily:
+    base-exp: 100
+  weekly:
+    base-exp: 500
+
+# Status Effect Durations (seconds)
+status-effects:
+  poison-duration: 10
+  burn-duration: 8
+  stun-duration: 3
+  poison-damage-per-tick: 3
+  burn-damage-per-tick: 4
+  burn-def-reduction: 0.20
+
+# Level cap
+level:
+  cap: 50
+  base-exp: 100
+
+# Rare items list (material names for CRAFT_RARE quest)
+rare-items:
+  - ELYTRA
+  - ENCHANTED_GOLDEN_APPLE
+  - BEACON
+  - END_CRYSTAL
+  - SHULKER_BOX
+  - NETHERITE_INGOT

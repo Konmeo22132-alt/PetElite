@@ -1,0 +1,27 @@
+name: PetPlugin
+version: '${project.version}'
+main: com.petplugin.PetPlugin
+api-version: '1.21'
+description: Pet management plugin with progression, skills, quests and battle system.
+authors: [PetPlugin Team]
+
+commands:
+  pet:
+    description: Main pet command.
+    usage: /pet [recall]
+    permission: petplugin.pet
+  petbattle:
+    description: Pet battle command.
+    usage: /petbattle <challenge|accept|surrender> [player]
+    permission: petplugin.battle
+
+permissions:
+  petplugin.pet:
+    description: Allows using /pet
+    default: true
+  petplugin.battle:
+    description: Allows using /petbattle
+    default: true
+  petplugin.admin:
+    description: Admin permissions
+    default: op
