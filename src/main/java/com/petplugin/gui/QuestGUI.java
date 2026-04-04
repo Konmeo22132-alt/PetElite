@@ -10,7 +10,10 @@ import com.petplugin.util.GuiUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 
 /**
@@ -86,4 +89,21 @@ public class QuestGUI implements Listener {
                 lore.toArray(new String[0]));
     }
 
+    // ---- Task 4: Cancel ALL inventory interactions in Quest GUI ----
+
+    private boolean isQuestGUI(net.kyori.adventure.text.Component title) {
+        return title.equals(ChatUtil.color(TITLE));
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!isQuestGUI(event.getView().title())) return;
+        event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!isQuestGUI(event.getView().title())) return;
+        event.setCancelled(true);
+    }
 }

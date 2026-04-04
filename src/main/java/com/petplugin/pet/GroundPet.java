@@ -10,15 +10,20 @@ import org.bukkit.entity.*;
 /**
  * Wolf/Cat — Ground locomotion.
  *
- * Pokemon-style follow (Task 2):
- *  • Target: 2 blocks behind player
- *  • Distance > 2 → use Pathfinder.moveTo() at speed 1.0
- *  • Distance > 10 → teleport to behind player (prevents getting stuck)
- *  • Pet faces same direction as player every tick
+ * Task 6 rework: manual position update, NO pathfinder AI.
+ *  • Target: 1.5 blocks behind player at ground level (same Y as player)
+ *  • Distance > 10 → hard teleport snap
+ *  • Distance > 2  → lerp 0.3 per tick toward target
+ *  • Distance ≤ 2  → do nothing
+ *  • Pet faces same direction as player (copyYaw) every tick
  */
 public class GroundPet extends PetEntity {
 
     private Tameable petEntity;
+
+    // Smoothed position for GroundPet
+    private double smoothX, smoothY, smoothZ;
+    private boolean smoothInit = false;
 
     public GroundPet(PetData petData, Player owner) {
         super(petData, owner);
@@ -26,7 +31,7 @@ public class GroundPet extends PetEntity {
 
     @Override
     public void spawn() {
-        Location loc = FloatPet.behindPlayer(owner, 2.0);
+        Location loc = FloatPet.behindPlayer(owner, 1.5);
         EntityType entityType = petData.getType() == PetType.WOLF
                 ? EntityType.WOLF : EntityType.CAT;
 
@@ -40,6 +45,13 @@ public class GroundPet extends PetEntity {
         petEntity.setPersistent(false); // DO NOT save to disk
         petEntity.setSilent(true);
 
+        // Task 6: Disable AI completely — use manual position update only
+        if (petEntity instanceof Mob mob) {
+            mob.setAI(false);
+            mob.setRemoveWhenFarAway(false);
+            if (petEntity instanceof Sittable sit) sit.setSitting(false);
+        }
+
         int maxHp = petData.getType().getBaseHp() + petData.getLevel() * 2;
         if (petEntity instanceof Creature creature) {
             var attr = creature.getAttribute(Attribute.MAX_HEALTH);
@@ -47,11 +59,11 @@ public class GroundPet extends PetEntity {
             creature.setHealth(maxHp);
         }
 
-        if (petEntity instanceof Mob mob) {
-            mob.setRemoveWhenFarAway(false);
-            if (petEntity instanceof Sittable sit) sit.setSitting(false);
-        }
-
+        // Initialise smooth position
+        smoothX = loc.getX();
+        smoothY = loc.getY();
+        smoothZ = loc.getZ();
+        smoothInit = true;
         spawned = true;
     }
 
@@ -60,6 +72,7 @@ public class GroundPet extends PetEntity {
         if (petEntity != null && !petEntity.isDead()) petEntity.remove();
         petEntity = null;
         spawned = false;
+        smoothInit = false;
     }
 
     @Override
@@ -78,21 +91,40 @@ public class GroundPet extends PetEntity {
             return;
         }
 
-        Location targetLoc = FloatPet.behindPlayer(owner, 2.0);
-        double dist = petEntity.getLocation().distance(owner.getLocation());
+        // Task 6: Manual position update — NO pathfinder
+        Location targetLoc = FloatPet.behindPlayer(owner, 1.5);
+        // Keep Y same as player (ground level)
+        targetLoc.setY(owner.getLocation().getY());
 
-        if (dist > 10.0) {
-            // Hard teleport snap
-            petEntity.teleport(targetLoc);
-        } else if (dist > 2.0) {
-            // Use pathfinder to move toward target point
-            petEntity.getPathfinder().moveTo(targetLoc, 1.0);
+        Location petLoc = petEntity.getLocation();
+        double dist = petLoc.distance(targetLoc);
+
+        // Initialise smooth if not done
+        if (!smoothInit) {
+            smoothX = petLoc.getX();
+            smoothY = petLoc.getY();
+            smoothZ = petLoc.getZ();
+            smoothInit = true;
         }
 
-        // Face same direction as owner (yaw only)
-        Location petLoc = petEntity.getLocation();
-        petLoc.setYaw(owner.getLocation().getYaw());
-        petEntity.teleport(petLoc);
+        if (dist > 10.0) {
+            // Hard snap
+            smoothX = targetLoc.getX();
+            smoothY = targetLoc.getY();
+            smoothZ = targetLoc.getZ();
+        } else if (dist > 2.0) {
+            // Lerp 0.3 per tick
+            double lf = 0.3;
+            smoothX += (targetLoc.getX() - smoothX) * lf;
+            smoothY += (targetLoc.getY() - smoothY) * lf;
+            smoothZ += (targetLoc.getZ() - smoothZ) * lf;
+        }
+        // else: within 2 blocks — just update yaw, no position change
+
+        // Apply: face player direction, move to smoothed position
+        float playerYaw = owner.getLocation().getYaw();
+        petEntity.teleport(new Location(owner.getWorld(), smoothX, smoothY, smoothZ,
+                playerYaw, petLoc.getPitch()));
     }
 
     @Override

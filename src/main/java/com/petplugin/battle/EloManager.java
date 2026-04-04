@@ -66,13 +66,19 @@ public class EloManager {
     }
 
     private void grantRankReward(Player player, PlayerData data) {
+        boolean slotGranted = false;
         switch (data.getRank()) {
-            case COPPER   -> data.setPetSlots(data.getPetSlots() + 1); // first real promotion
-            case DIAMOND  -> data.setPetSlots(data.getPetSlots() + 1);
+            case COPPER   -> { data.setPetSlots(data.getPetSlots() + 1); slotGranted = true; }
+            case DIAMOND  -> { data.setPetSlots(data.getPetSlots() + 1); slotGranted = true; }
             // Other rewards (items, skins) — placeholder
             default -> {}
         }
-        plugin.getDataManager().savePlayer(data);
+        plugin.getDataManager().savePlayer(data); // save AFTER incrementing
+        if (slotGranted) {
+            player.sendMessage(ChatUtil.color(
+                "&6[ELO] &a★ Slot pet mới được mở khoá! &fBạn hiện có &e"
+                + data.getPetSlots() + " &fslot pet."));
+        }
         player.sendMessage(ChatUtil.color("&6[ELO] &eBạn nhận được phần thưởng hạng mới!"));
     }
 

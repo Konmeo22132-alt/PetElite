@@ -8,7 +8,10 @@ import com.petplugin.util.GuiUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -112,5 +115,23 @@ public class RankGUI implements Listener {
             if (tiers[i] == current) return tiers[i + 1];
         }
         return null;
+    }
+
+    // ---- Task 4: Cancel ALL inventory interactions in Rank GUI ----
+
+    private boolean isRankGUI(net.kyori.adventure.text.Component title) {
+        return title.equals(ChatUtil.color(TITLE));
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!isRankGUI(event.getView().title())) return;
+        event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!isRankGUI(event.getView().title())) return;
+        event.setCancelled(true);
     }
 }

@@ -96,6 +96,7 @@ public final class PetPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new BattleListener(this),       this);
         getServer().getPluginManager().registerEvents(new PetDamageListener(this),    this);
         getServer().getPluginManager().registerEvents(new MysteryEggListener(this),   this);
+        getServer().getPluginManager().registerEvents(new BasicAttackHandler(this),   this); // Task 5
         // PlayerJoin hook for waitingRespawn & Snapshot recover
         getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
             @org.bukkit.event.EventHandler
@@ -304,7 +305,13 @@ public final class PetPlugin extends JavaPlugin {
                 yield true;
             }
             case "rank" -> {
-                rankGUI.open(player);
+                try {
+                    rankGUI.open(player);
+                } catch (Exception ex) {
+                    getLogger().severe("[PetPlugin] RankGUI.open() threw an exception for " + player.getName() + ":");
+                    ex.printStackTrace();
+                    player.sendMessage(ChatUtil.color("&cLỗi khi mở Rank GUI. Vui lòng báo cáo admin."));
+                }
                 yield true;
             }
             default -> {

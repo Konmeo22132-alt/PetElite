@@ -3,6 +3,7 @@ package com.petplugin.pet;
 import com.petplugin.data.PetData;
 import com.petplugin.skill.ParticleHandler;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.*;
@@ -23,6 +24,7 @@ public class FloatPet extends PetEntity {
 
     // Smoothed position
     private double smoothX, smoothY, smoothZ;
+    private boolean firstTick = true;
 
     public FloatPet(PetData petData, Player owner) {
         super(petData, owner);
@@ -37,6 +39,7 @@ public class FloatPet extends PetEntity {
             entity.setCustomNameVisible(true);
             entity.customName(Component.text(petData.getName()));
             entity.setAdult(); // Force adult turtle — more visible
+            entity.setInvisible(false);
 
             // --- Behaviour flags ---
             entity.setAI(false);
@@ -52,10 +55,13 @@ public class FloatPet extends PetEntity {
             entity.setHealth(100);
         });
 
+        Bukkit.getLogger().info("[PetPlugin] Spawned FloatPet for " + owner.getName() + " at " + loc);
+
         smoothX = loc.getX();
         smoothY = loc.getY();
         smoothZ = loc.getZ();
         spawned = true;
+        firstTick = true;
     }
 
     @Override
@@ -79,6 +85,11 @@ public class FloatPet extends PetEntity {
                 despawn();
             }
             return;
+        }
+
+        if (firstTick) {
+            Bukkit.getLogger().info("[PetPlugin] First tick for FloatPet: " + turtleEntity.getUniqueId());
+            firstTick = false;
         }
 
         // TPS-independent float animation using system time

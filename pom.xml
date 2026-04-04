@@ -7,10 +7,10 @@
 
     <groupId>com.petplugin</groupId>
     <artifactId>PetPlugin</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
-    <name>PetPlugin</name>
+    <name>PetElite</name>
     <description>Pet management plugin with progression, skills, quests and battle system.</description>
 
     <properties>

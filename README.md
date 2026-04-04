@@ -6,7 +6,8 @@
 ![Paper](https://img.shields.io/badge/Paper-1.21.x-F7A800?style=for-the-badge&logo=papermc&logoColor=white)
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-In%20Development-3B82F6?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.0.1-6A0DAD?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Release-22C55E?style=for-the-badge)
 
 ### *A Pokémon-inspired pet system for Minecraft economy servers.*
 
@@ -18,16 +19,13 @@ Choose your starter · Level up · Master skills · Battle for rank.
 
 ## 🔄 Latest Update
 
-| Fix / Feature | Status |
-|---|---|
-| ✅ Fixed rename flow | Full colour code support, live entity name update, empty/length validation |
-| ✅ Pokémon-style pet follow | 1.5–2 blocks behind player, pathfinder AI, snap if >10 blocks |
-| ✅ Rank GUI correct materials | Coal→Copper→Iron→Gold→Diamond→Netherite with glow on current rank |
-| ✅ Mystery Egg obtainable in creative | `/pet egg` command · PDC-tagged DRAGON_EGG · custom model data 1001 |
-| ✅ Mystery Egg spin animation on use | 2s title animation cycling pet names, fast→slow→lock on result |
-| ✅ Players cannot damage their own pet | Silent cancel on direct hit and projectile |
-| ✅ Pet respawn system (30s after fainting) | SMOKE particles on faint, auto-respawn on login if was offline |
-| ✅ Show/Hide pet toggle in GUI | Slot 13 — ENDER_EYE/ENDER_PEARL, updates in-place without closing GUI |
+### v1.0.1 — Patch
+- Fixed turtle pet not rendering
+- Fixed rank-up not unlocking pet slot
+- Fixed rank GUI crash on open
+- Fixed item theft from Quest GUI and all other GUIs
+- Added basic attack: pet dashes to target on player melee hit
+- Improved pet follow: stays within 2 blocks using manual position update
 
 ## 🌟 Overview
 
@@ -52,12 +50,12 @@ Choose your starter · Level up · Master skills · Battle for rank.
 
 | Pet | Role | Movement | Base HP | Base ATK | Base DEF | Growth (ATK/DEF/HEAL per level) |
 |-----|------|----------|---------|----------|----------|----------------------------------|
-| 🐢 **Turtle** | Tank | Floating Display Entity | 100 | 8 | 20 | `+0 / +2 / +1` |
-| 🐺 **Wolf** | DPS | Ground (follows player) | 80 | 20 | 10 | `+2 / +1 / +0` |
-| 🐱 **Cat** | Support | Ground (follows player) | 80 | 12 | 8 | `+1 / +0 / +2` |
+| 🐢 **Turtle** | Tank | Floating (real Turtle entity, AI off, gravity off) | 100 | 8 | 20 | `+0 / +2 / +1` |
+| 🐺 **Wolf** | DPS | Ground (manual follow, AI off) | 80 | 20 | 10 | `+2 / +1 / +0` |
+| 🐱 **Cat** | Support | Ground (manual follow, AI off) | 80 | 12 | 8 | `+1 / +0 / +2` |
 
-> **Turtle** floats beside you using a BlockDisplay entity with smooth lerp animation.  
-> **Wolf** and **Cat** spawn as actual tameable mob entities with vanilla follow AI.
+> **Turtle** floats beside you at Y+1.2 using a real Turtle entity with AI disabled and gravity off, lerping smoothly to stay 1.5 blocks behind.  
+> **Wolf** and **Cat** use manual position updates (no pathfinder AI) and stay within 2 blocks of the player at all times.
 
 ---
 
