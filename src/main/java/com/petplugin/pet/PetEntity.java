@@ -1,6 +1,7 @@
 package com.petplugin.pet;
 
 import com.petplugin.data.PetData;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
 /**
@@ -29,6 +30,12 @@ public abstract class PetEntity {
 
     /** Called when a passive skill should trigger. */
     public abstract void onPassiveSkillTrigger(org.bukkit.entity.LivingEntity target);
+
+    /**
+     * Update the visible display name on the entity immediately (after rename).
+     * @param newName colour-translated name string
+     */
+    public abstract void updateDisplayName(String newName);
 
     /** Is this pet currently visible in the world? */
     public boolean isSpawned() { return spawned; }

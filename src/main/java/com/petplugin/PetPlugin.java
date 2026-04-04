@@ -5,8 +5,10 @@ import com.petplugin.data.DataManager;
 import com.petplugin.data.YamlDataManager;
 import com.petplugin.gui.*;
 import com.petplugin.gui.PetSelectorGUI;
+import com.petplugin.item.MysteryEggItem;
 import com.petplugin.listener.*;
 import com.petplugin.pet.PetManager;
+import com.petplugin.pet.PetRespawnManager;
 import com.petplugin.quest.QuestResetScheduler;
 import com.petplugin.quest.QuestTracker;
 import com.petplugin.skill.StatusEffectManager;
@@ -30,6 +32,7 @@ public final class PetPlugin extends JavaPlugin {
     private StatusEffectManager statusEffectManager;
     private QuestTracker questTracker;
     private QuestResetScheduler questResetScheduler;
+    private PetRespawnManager petRespawnManager;
 
     // ---- GUI ----
     private PetSelectGUI petSelectGUI;
@@ -56,6 +59,7 @@ public final class PetPlugin extends JavaPlugin {
         statusEffectManager = new StatusEffectManager(this);
         questTracker   = new QuestTracker(this);
         questResetScheduler = new QuestResetScheduler(this);
+        petRespawnManager = new PetRespawnManager(this);
 
         // GUIs
         petSelectGUI = new PetSelectGUI(this);
@@ -79,6 +83,15 @@ public final class PetPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new PlayerListener(this),       this);
         getServer().getPluginManager().registerEvents(new PetInteractListener(this),  this);
         getServer().getPluginManager().registerEvents(new BattleListener(this),       this);
+        getServer().getPluginManager().registerEvents(new PetDamageListener(this),    this);
+        getServer().getPluginManager().registerEvents(new MysteryEggListener(this),   this);
+        // PlayerJoin hook for waitingRespawn
+        getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
+            @org.bukkit.event.EventHandler
+            public void onJoin(org.bukkit.event.player.PlayerJoinEvent e) {
+                petRespawnManager.checkWaitingRespawn(e.getPlayer());
+            }
+        }, this);
 
         // Start schedulers
         petManager.start();
@@ -128,6 +141,12 @@ public final class PetPlugin extends JavaPlugin {
     }
 
     private boolean handlePetCommand(Player player, String[] args) {
+        // /pet egg — give mystery egg item
+        if (args.length > 0 && args[0].equalsIgnoreCase("egg")) {
+            player.getInventory().addItem(MysteryEggItem.create(this));
+            player.sendMessage(ChatUtil.color("&a🥚 Mystery Egg added to your inventory!"));
+            return true;
+        }
         if (args.length > 0 && args[0].equalsIgnoreCase("recall")) {
             petManager.toggle(player);
             return true;
@@ -204,4 +223,5 @@ public final class PetPlugin extends JavaPlugin {
     public QuestGUI getQuestGUI()                       { return questGUI; }
     public RankGUI getRankGUI()                         { return rankGUI; }
     public PetSelectorGUI getPetSelectorGUI()           { return petSelectorGUI; }
+    public PetRespawnManager getPetRespawnManager()     { return petRespawnManager; }
 }

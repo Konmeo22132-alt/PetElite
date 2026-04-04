@@ -70,7 +70,14 @@ public class PetManager extends BukkitRunnable {
 
     /** Recall (despawn) the pet. */
     public void recall(Player player) {
+        if (player == null) return;
         PetEntity pet = activePets.remove(player.getUniqueId());
+        if (pet != null) pet.despawn();
+    }
+
+    /** Force-recall by UUID (works even without a Player object). */
+    public void forceRecall(java.util.UUID uuid) {
+        PetEntity pet = activePets.remove(uuid);
         if (pet != null) pet.despawn();
     }
 

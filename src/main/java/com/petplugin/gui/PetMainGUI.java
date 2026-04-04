@@ -3,10 +3,15 @@ package com.petplugin.gui;
 import com.petplugin.PetPlugin;
 import com.petplugin.data.PetData;
 import com.petplugin.data.PlayerData;
+import com.petplugin.pet.PetEntity;
+import com.petplugin.pet.FloatPet;
+import com.petplugin.pet.GroundPet;
 import com.petplugin.pet.PetType;
 import com.petplugin.util.ChatUtil;
 import com.petplugin.util.GuiUtil;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -24,12 +29,13 @@ import java.util.UUID;
 /**
  * Main interaction GUI opened by /pet (when pet exists) or Shift+click on pet.
  *
- * Layout (18 slots — 2 rows):
+ * Layout (27 slots — 3 rows):
  *  Slot  2  — Skill Tree
  *  Slot  4  — Rename
  *  Slot  6  — Quests
  *  Slot  8  — Mystery Egg (always visible)
  *  Slot 11  — Pet Selector (only if petSlots > 1)
+ *  Slot 13  — Show/Hide pet toggle
  */
 public class PetMainGUI implements Listener {
 
@@ -60,8 +66,8 @@ public class PetMainGUI implements Listener {
             return;
         }
 
-        Inventory inv = Bukkit.createInventory(null, 18, ChatUtil.color(TITLE_COLOR));
-        for (int i = 0; i < 18; i++) inv.setItem(i, GuiUtil.filler());
+        Inventory inv = Bukkit.createInventory(null, 27, ChatUtil.color(TITLE_COLOR));
+        for (int i = 0; i < 27; i++) inv.setItem(i, GuiUtil.filler());
 
         // Slot 2 — Skills
         inv.setItem(2, GuiUtil.buildGlowItem(Material.BOOK,
@@ -98,7 +104,6 @@ public class PetMainGUI implements Listener {
         boolean hasSlot = ownedPets.size() < slots;
 
         if (!usedFree) {
-            // First use — FREE and glowing
             inv.setItem(8, GuiUtil.buildGlowItem(Material.DRAGON_EGG,
                     "&d🥚 Mystery Egg &6[MIỄN PHÍ]",
                     "&7Nở ra một pet ngẫu nhiên!",
@@ -106,7 +111,6 @@ public class PetMainGUI implements Listener {
                     "",
                     hasSlot ? "&aClick để ấp trứng!" : "&cKhông đủ slot pet! Nâng cấp trước."));
         } else {
-            // Already used — show cost
             inv.setItem(8, GuiUtil.buildItem(Material.DRAGON_EGG,
                     "&d🥚 Mystery Egg",
                     "&7Nở ra một pet ngẫu nhiên!",
@@ -126,6 +130,15 @@ public class PetMainGUI implements Listener {
                     "&eClick để chọn pet!"));
         }
 
+        // Slot 13 — Show/Hide toggle (Task 8)
+        boolean isVisible = pet.isVisible();
+        inv.setItem(13, GuiUtil.buildGlowItem(
+                isVisible ? Material.ENDER_EYE : Material.ENDER_PEARL,
+                isVisible ? "&aẨn Pet" : "&aHiện Pet",
+                isVisible ? "&7Pet đang hiển thị. Click để ẩn." : "&7Pet đang bị ẩn. Click để hiện.",
+                "",
+                "&eClick để chuyển đổi!"));
+
         player.openInventory(inv);
     }
 
@@ -136,7 +149,7 @@ public class PetMainGUI implements Listener {
 
         event.setCancelled(true);
         int slot = event.getRawSlot();
-        if (slot < 0 || slot >= 18) return;
+        if (slot < 0 || slot >= 27) return;
 
         switch (slot) {
             case 2 -> { // Skills
@@ -162,7 +175,37 @@ public class PetMainGUI implements Listener {
                     plugin.getPetSelectorGUI().open(player);
                 }
             }
+            case 13 -> handleShowHide(player, event.getView().getTopInventory()); // Show/Hide
         }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Show/Hide toggle (Task 8)
+    // ------------------------------------------------------------------ //
+
+    private void handleShowHide(Player player, Inventory inv) {
+        PetData pet = plugin.getDataManager().getActivePet(player.getUniqueId());
+        if (pet == null) return;
+
+        boolean nowVisible = !pet.isVisible();
+        pet.setVisible(nowVisible);
+        plugin.getDataManager().savePet(pet);
+
+        if (nowVisible) {
+            plugin.getPetManager().summon(player);
+            player.sendMessage(ChatUtil.color("&a✦ Pet đã được hiện!"));
+        } else {
+            plugin.getPetManager().recall(player);
+            player.sendMessage(ChatUtil.color("&7✦ Pet đã được ẩn."));
+        }
+
+        // Update slot in-place without closing GUI
+        inv.setItem(13, GuiUtil.buildGlowItem(
+                nowVisible ? Material.ENDER_EYE : Material.ENDER_PEARL,
+                nowVisible ? "&aẨn Pet" : "&aHiện Pet",
+                nowVisible ? "&7Pet đang hiển thị. Click để ẩn." : "&7Pet đang bị ẩn. Click để hiện.",
+                "",
+                "&eClick để chuyển đổi!"));
     }
 
     // ------------------------------------------------------------------ //
@@ -233,9 +276,21 @@ public class PetMainGUI implements Listener {
         event.setCancelled(true);
         awaitingName.remove(player.getUniqueId());
 
-        String newName = ChatUtil.colorLegacy(event.getMessage().trim());
-        if (newName.isEmpty() || newName.length() > 32) {
-            player.sendMessage(ChatUtil.color("&cTên không hợp lệ (1-32 ký tự)."));
+        // Apply & colour codes (legacy translate)
+        String raw = event.getMessage().trim();
+        if (raw.isEmpty()) {
+            player.sendMessage(ChatUtil.color("&cĐổi tên đã bị hủy (nhập trống)."));
+            return;
+        }
+        String newName = ChatColor.translateAlternateColorCodes('&', raw);
+        // Strip colour codes for length check
+        String stripped = ChatColor.stripColor(newName);
+        if (stripped == null || stripped.isEmpty()) {
+            player.sendMessage(ChatUtil.color("&cTên không hợp lệ."));
+            return;
+        }
+        if (stripped.length() > 32) {
+            player.sendMessage(ChatUtil.color("&cTên quá dài! Tối đa 32 ký tự."));
             return;
         }
 
@@ -244,6 +299,11 @@ public class PetMainGUI implements Listener {
             if (pet == null) return;
             pet.setName(newName);
             plugin.getDataManager().savePet(pet);
+
+            // Update live entity name immediately
+            var petEntity = plugin.getPetManager().getActivePet(player.getUniqueId());
+            if (petEntity != null) petEntity.updateDisplayName(newName);
+
             player.sendMessage(ChatUtil.color("&aTên pet đã được đổi thành: &f" + newName));
         });
     }

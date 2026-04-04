@@ -16,6 +16,19 @@ Choose your starter · Level up · Master skills · Battle for rank.
 
 ---
 
+## 🔄 Latest Update
+
+| Fix / Feature | Status |
+|---|---|
+| ✅ Fixed rename flow | Full colour code support, live entity name update, empty/length validation |
+| ✅ Pokémon-style pet follow | 1.5–2 blocks behind player, pathfinder AI, snap if >10 blocks |
+| ✅ Rank GUI correct materials | Coal→Copper→Iron→Gold→Diamond→Netherite with glow on current rank |
+| ✅ Mystery Egg obtainable in creative | `/pet egg` command · PDC-tagged DRAGON_EGG · custom model data 1001 |
+| ✅ Mystery Egg spin animation on use | 2s title animation cycling pet names, fast→slow→lock on result |
+| ✅ Players cannot damage their own pet | Silent cancel on direct hit and projectile |
+| ✅ Pet respawn system (30s after fainting) | SMOKE particles on faint, auto-respawn on login if was offline |
+| ✅ Show/Hide pet toggle in GUI | Slot 13 — ENDER_EYE/ENDER_PEARL, updates in-place without closing GUI |
+
 ## 🌟 Overview
 
 **PetElite** is a feature-rich Paper plugin that brings a Pokémon-style companion system to your economy server. Players choose a starter pet, grow it through an EXP & level system, unlock powerful skills across three strategic branches, complete daily and weekly quests, and compete in 1v1 ranked turn-based battles.
