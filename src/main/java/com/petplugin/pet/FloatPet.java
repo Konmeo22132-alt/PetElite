@@ -4,25 +4,21 @@ import com.petplugin.data.PetData;
 import com.petplugin.skill.ParticleHandler;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
-import org.bukkit.entity.BlockDisplay;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Player;
-import org.bukkit.util.Transformation;
-import org.joml.AxisAngle4f;
-import org.joml.Vector3f;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.entity.*;
 
 /**
- * Turtle — Float locomotion using a BlockDisplay entity.
+ * Turtle — Float locomotion using a real TURTLE entity.
  *
- * Pokemon-style follow:
- *  • Target position: player.loc + behind player by 1.5 blocks + Y +1.2
- *  • Lerp smoothly each tick (factor 0.08)
- *  • Teleport snap if > 10 blocks away (prevents getting stuck)
- *  • Sine-wave Y float animation (±0.1 block)
+ * Task 1 fix: replaced BlockDisplay egg with actual Turtle mob.
+ *  • AI disabled, silent, invulnerable, persistent
+ *  • Pokémon-style float: lerp Y toward player.y + 1.2, 1.5 blocks behind
+ *  • Sine-wave float animation (±0.1 block)
+ *  • Snap teleport if > 10 blocks away
  */
 public class FloatPet extends PetEntity {
 
-    private BlockDisplay display;
+    private Turtle turtleEntity;
     private double tickCounter = 0.0;
 
     // Smoothed position
@@ -35,19 +31,27 @@ public class FloatPet extends PetEntity {
     @Override
     public void spawn() {
         Location loc = behindPlayer(owner, 1.5).add(0, 1.2, 0);
-        display = owner.getWorld().spawn(loc, BlockDisplay.class, entity -> {
-            entity.setBlock(org.bukkit.Bukkit.createBlockData(org.bukkit.Material.TURTLE_EGG));
+
+        turtleEntity = owner.getWorld().spawn(loc, Turtle.class, entity -> {
+            // --- Appearance ---
             entity.setCustomNameVisible(true);
             entity.customName(Component.text(petData.getName()));
-            entity.setInterpolationDuration(2);
-            entity.setTeleportDuration(2);
-            entity.setTransformation(new Transformation(
-                new Vector3f(-0.35f, 0f, -0.35f),
-                new AxisAngle4f(0, 0, 0, 1),
-                new Vector3f(0.7f, 0.7f, 0.7f),
-                new AxisAngle4f(0, 0, 0, 1)
-            ));
+            entity.setAdult(); // Force adult turtle — more visible
+
+            // --- Behaviour flags ---
+            entity.setAI(false);
+            entity.setSilent(true);
+            entity.setInvulnerable(true);
+            entity.setPersistent(true);
+            entity.setRemoveWhenFarAway(false);
+            entity.setGravity(false); // Float — don't fall
+
+            // --- Max HP (cosmetic, no battle impact) ---
+            var attr = entity.getAttribute(Attribute.MAX_HEALTH);
+            if (attr != null) attr.setBaseValue(100);
+            entity.setHealth(100);
         });
+
         smoothX = loc.getX();
         smoothY = loc.getY();
         smoothZ = loc.getZ();
@@ -56,14 +60,14 @@ public class FloatPet extends PetEntity {
 
     @Override
     public void despawn() {
-        if (display != null && !display.isDead()) display.remove();
-        display = null;
+        if (turtleEntity != null && !turtleEntity.isDead()) turtleEntity.remove();
+        turtleEntity = null;
         spawned = false;
     }
 
     @Override
     public void tick() {
-        if (!spawned || display == null || display.isDead()) return;
+        if (!spawned || turtleEntity == null || turtleEntity.isDead()) return;
         if (!owner.isOnline()) { despawn(); return; }
 
         tickCounter += 0.08;
@@ -71,14 +75,14 @@ public class FloatPet extends PetEntity {
 
         Location targetRaw = behindPlayer(owner, 1.5).add(0, 1.2 + floatOffset, 0);
 
-        // Snap if too far away
-        double distSq = display.getLocation().distanceSquared(targetRaw);
-        if (distSq > 100.0) { // > 10 blocks
+        // Snap if too far away (> 10 blocks)
+        double distSq = turtleEntity.getLocation().distanceSquared(targetRaw);
+        if (distSq > 100.0) {
             smoothX = targetRaw.getX();
             smoothY = targetRaw.getY();
             smoothZ = targetRaw.getZ();
         } else {
-            double lf = 0.10; // lerp factor — slightly tighter than before
+            double lf = 0.12; // lerp factor
             smoothX += (targetRaw.getX() - smoothX) * lf;
             smoothY += (targetRaw.getY() - smoothY) * lf;
             smoothZ += (targetRaw.getZ() - smoothZ) * lf;
@@ -86,28 +90,28 @@ public class FloatPet extends PetEntity {
 
         // Clamp Y
         double ownerY = owner.getLocation().getY();
-        smoothY = Math.min(smoothY, ownerY + 3.0);
+        smoothY = Math.min(smoothY, ownerY + 3.5);
         smoothY = Math.max(smoothY, ownerY - 0.5);
 
-        display.teleport(new Location(owner.getWorld(), smoothX, smoothY, smoothZ,
-                display.getLocation().getYaw(), display.getLocation().getPitch()));
+        turtleEntity.teleport(new Location(owner.getWorld(), smoothX, smoothY, smoothZ,
+                turtleEntity.getLocation().getYaw(), turtleEntity.getLocation().getPitch()));
     }
 
     @Override
     public void updateDisplayName(String newName) {
-        if (display != null && !display.isDead()) {
-            display.customName(Component.text(newName));
+        if (turtleEntity != null && !turtleEntity.isDead()) {
+            turtleEntity.customName(Component.text(newName));
         }
     }
 
     @Override
     public void onPassiveSkillTrigger(LivingEntity target) {
-        if (display != null) {
+        if (turtleEntity != null) {
             ParticleHandler.spawnSkillParticle(owner, com.petplugin.skill.BranchType.DEF_BRANCH);
         }
     }
 
-    public BlockDisplay getDisplay() { return display; }
+    public Turtle getTurtleEntity() { return turtleEntity; }
 
     // ---- Helpers ----
 

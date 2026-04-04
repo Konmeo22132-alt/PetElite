@@ -35,6 +35,11 @@ public class GroundPet extends PetEntity {
         petEntity.setCustomNameVisible(true);
         petEntity.customName(Component.text(petData.getName()));
 
+        // --- Safety flags (same as FloatPet Turtle) ---
+        petEntity.setInvulnerable(true);
+        petEntity.setPersistent(true);
+        petEntity.setSilent(true);
+
         int maxHp = petData.getType().getBaseHp() + petData.getLevel() * 2;
         if (petEntity instanceof Creature creature) {
             var attr = creature.getAttribute(Attribute.MAX_HEALTH);
@@ -44,7 +49,6 @@ public class GroundPet extends PetEntity {
 
         if (petEntity instanceof Mob mob) {
             mob.setRemoveWhenFarAway(false);
-            // Disable vanilla sitting so the pet actually follows
             if (petEntity instanceof Sittable sit) sit.setSitting(false);
         }
 

@@ -111,8 +111,8 @@ public class PetManager extends BukkitRunnable {
         for (PetEntity pet : activePets.values()) {
             if (pet instanceof GroundPet gp && gp.getEntity() != null
                     && gp.getEntity().getEntityId() == entity.getEntityId()) return true;
-            if (pet instanceof FloatPet fp && fp.getDisplay() != null
-                    && fp.getDisplay().getEntityId() == entity.getEntityId()) return true;
+            if (pet instanceof FloatPet fp && fp.getTurtleEntity() != null
+                    && fp.getTurtleEntity().getEntityId() == entity.getEntityId()) return true;
         }
         return false;
     }
@@ -123,8 +123,8 @@ public class PetManager extends BukkitRunnable {
             PetEntity pet = entry.getValue();
             if (pet instanceof GroundPet gp && gp.getEntity() != null
                     && gp.getEntity().getEntityId() == entity.getEntityId()) return entry.getKey();
-            if (pet instanceof FloatPet fp && fp.getDisplay() != null
-                    && fp.getDisplay().getEntityId() == entity.getEntityId()) return entry.getKey();
+            if (pet instanceof FloatPet fp && fp.getTurtleEntity() != null
+                    && fp.getTurtleEntity().getEntityId() == entity.getEntityId()) return entry.getKey();
         }
         return null;
     }

@@ -2,6 +2,8 @@ package com.petplugin;
 
 import com.petplugin.battle.*;
 import com.petplugin.data.DataManager;
+import com.petplugin.data.PlayerData;
+import com.petplugin.data.PetData;
 import com.petplugin.data.YamlDataManager;
 import com.petplugin.gui.*;
 import com.petplugin.gui.PetSelectorGUI;
@@ -13,11 +15,15 @@ import com.petplugin.quest.QuestResetScheduler;
 import com.petplugin.quest.QuestTracker;
 import com.petplugin.skill.StatusEffectManager;
 import com.petplugin.util.ChatUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 public final class PetPlugin extends JavaPlugin {
@@ -147,9 +153,16 @@ public final class PetPlugin extends JavaPlugin {
             player.sendMessage(ChatUtil.color("&a🥚 Mystery Egg added to your inventory!"));
             return true;
         }
+
+        // /pet recall
         if (args.length > 0 && args[0].equalsIgnoreCase("recall")) {
             petManager.toggle(player);
             return true;
+        }
+
+        // /pet set {rank|level|exp} <player> <value> — OP only (Task 3)
+        if (args.length > 0 && args[0].equalsIgnoreCase("set")) {
+            return handleSetCommand(player, args);
         }
 
         // No active pet → show starter GUI
@@ -158,6 +171,105 @@ public final class PetPlugin extends JavaPlugin {
             petSelectGUI.open(player);
         } else {
             petMainGUI.open(player);
+        }
+        return true;
+    }
+
+    // ------------------------------------------------------------------ //
+    //  /pet set command (Task 3)
+    // ------------------------------------------------------------------ //
+
+    private boolean handleSetCommand(Player sender, String[] args) {
+        if (!sender.isOp()) {
+            sender.sendMessage(ChatUtil.color("&cYou don't have permission to use this command."));
+            return true;
+        }
+        // args: ["set", type, player, value]
+        if (args.length < 4) {
+            sender.sendMessage(ChatUtil.color(
+                "&cUsage: /pet set &e<rank|level|exp> <player> <value>"));
+            return true;
+        }
+
+        String type   = args[1].toLowerCase();
+        String playerName = args[2];
+        String valueStr   = args[3];
+
+        Player target = Bukkit.getPlayer(playerName);
+        if (target == null) {
+            sender.sendMessage(ChatUtil.color("&cPlayer '" + playerName + "' not found or offline."));
+            return true;
+        }
+
+        switch (type) {
+            case "rank" -> {
+                PlayerData.RankTier tier;
+                try {
+                    tier = PlayerData.RankTier.valueOf(valueStr.toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    sender.sendMessage(ChatUtil.color(
+                        "&cInvalid rank. Use: COAL, COPPER, IRON, GOLD, DIAMOND, NETHERITE"));
+                    return true;
+                }
+                PlayerData pd = dataManager.loadPlayer(target.getUniqueId());
+                pd.setRank(tier);
+                pd.setElo(tier.getMinElo());
+                dataManager.savePlayer(pd);
+                sender.sendMessage(ChatUtil.color(
+                    "&aSet rank of &e" + target.getName() + "&a to &e" + tier.name() + "&a successfully."));
+                target.sendMessage(ChatUtil.color("&eYour pet stats have been updated by an admin."));
+            }
+            case "level" -> {
+                int level;
+                try { level = Integer.parseInt(valueStr); } catch (NumberFormatException e) {
+                    sender.sendMessage(ChatUtil.color("&cInvalid level value."));
+                    return true;
+                }
+                if (level < 1 || level > 50) {
+                    sender.sendMessage(ChatUtil.color("&cLevel must be between 1 and 50."));
+                    return true;
+                }
+                PetData pet = dataManager.getActivePet(target.getUniqueId());
+                if (pet == null) {
+                    sender.sendMessage(ChatUtil.color("&c" + target.getName() + " has no active pet."));
+                    return true;
+                }
+                // Grant cumulative skill points for all levels up to target
+                // without resetting already-unlocked skills
+                int currentLevel = pet.getLevel();
+                pet.setLevel(level);
+                pet.setCurrentExp(0);
+                if (level > currentLevel) {
+                    int diff = level - currentLevel;
+                    pet.setAtkPoints(pet.getAtkPoints() + pet.getType().getAtkGain() * diff);
+                    pet.setDefPoints(pet.getDefPoints() + pet.getType().getDefGain() * diff);
+                    pet.setHealPoints(pet.getHealPoints() + pet.getType().getHealGain() * diff);
+                }
+                dataManager.savePet(pet);
+                sender.sendMessage(ChatUtil.color(
+                    "&aSet level of &e" + target.getName() + "'s pet&a to &e" + level + "&a successfully."));
+                target.sendMessage(ChatUtil.color("&eYour pet stats have been updated by an admin."));
+            }
+            case "exp" -> {
+                long exp;
+                try { exp = Long.parseLong(valueStr); } catch (NumberFormatException e) {
+                    sender.sendMessage(ChatUtil.color("&cInvalid EXP value."));
+                    return true;
+                }
+                PetData pet = dataManager.getActivePet(target.getUniqueId());
+                if (pet == null) {
+                    sender.sendMessage(ChatUtil.color("&c" + target.getName() + " has no active pet."));
+                    return true;
+                }
+                pet.setCurrentExp(0);
+                pet.addExp(exp); // triggers level-up loop
+                dataManager.savePet(pet);
+                sender.sendMessage(ChatUtil.color(
+                    "&aSet EXP of &e" + target.getName() + "'s pet&a to &e" + exp + "&a (may have leveled up)."));
+                target.sendMessage(ChatUtil.color("&eYour pet stats have been updated by an admin."));
+            }
+            default -> sender.sendMessage(ChatUtil.color(
+                "&cUnknown type. Use: rank, level, exp"));
         }
         return true;
     }
@@ -203,6 +315,68 @@ public final class PetPlugin extends JavaPlugin {
                 + "&e/petbattle accept &7- Chấp nhận lời thách\n"
                 + "&e/petbattle surrender &7- Đầu hàng\n"
                 + "&e/petbattle rank &7- Xem rank"));
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Tab Completion (Task 4 — context-aware)
+    // ------------------------------------------------------------------ //
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        List<String> suggestions = new ArrayList<>();
+        String cmd = command.getName().toLowerCase();
+
+        if (cmd.equals("pet")) {
+            if (args.length == 1) {
+                // Base subcommands
+                List<String> base = new ArrayList<>(Arrays.asList("recall", "egg"));
+                if (sender.isOp()) base.add("set");
+                filterAndAdd(suggestions, base, args[0]);
+
+            } else if (args.length == 2 && args[0].equalsIgnoreCase("set") && sender.isOp()) {
+                filterAndAdd(suggestions, Arrays.asList("rank", "level", "exp"), args[1]);
+
+            } else if (args.length == 3 && args[0].equalsIgnoreCase("set") && sender.isOp()) {
+                // Player argument — online players only
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (p.getName().toLowerCase().startsWith(args[2].toLowerCase()))
+                        suggestions.add(p.getName());
+                }
+
+            } else if (args.length == 4 && args[0].equalsIgnoreCase("set") && sender.isOp()) {
+                // Value argument
+                switch (args[1].toLowerCase()) {
+                    case "rank"  -> filterAndAdd(suggestions,
+                        Arrays.asList("COAL", "COPPER", "IRON", "GOLD", "DIAMOND", "NETHERITE"), args[3]);
+                    case "level" -> filterAndAdd(suggestions,
+                        Arrays.asList("1", "10", "20", "30", "40", "50"), args[3]);
+                    // exp — no suggestion
+                }
+            }
+        }
+
+        if (cmd.equals("petbattle")) {
+            if (args.length == 1) {
+                filterAndAdd(suggestions,
+                    Arrays.asList("challenge", "accept", "surrender", "rank"), args[0]);
+
+            } else if (args.length == 2 && args[0].equalsIgnoreCase("challenge")) {
+                // Suggest online players (excluding self)
+                for (Player p : Bukkit.getOnlinePlayers()) {
+                    if (sender instanceof Player self && p == self) continue;
+                    if (p.getName().toLowerCase().startsWith(args[1].toLowerCase()))
+                        suggestions.add(p.getName());
+                }
+            }
+        }
+
+        return suggestions;
+    }
+
+    private void filterAndAdd(List<String> out, List<String> candidates, String prefix) {
+        for (String c : candidates) {
+            if (c.toLowerCase().startsWith(prefix.toLowerCase())) out.add(c);
+        }
     }
 
     // ------------------------------------------------------------------ //
