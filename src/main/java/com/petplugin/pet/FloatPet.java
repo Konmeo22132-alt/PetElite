@@ -42,7 +42,7 @@ public class FloatPet extends PetEntity {
             entity.setAI(false);
             entity.setSilent(true);
             entity.setInvulnerable(true);
-            entity.setPersistent(true);
+            entity.setPersistent(false); // DO NOT save to disk
             entity.setRemoveWhenFarAway(false);
             entity.setGravity(false); // Float — don't fall
 
@@ -67,10 +67,22 @@ public class FloatPet extends PetEntity {
 
     @Override
     public void tick() {
-        if (!spawned || turtleEntity == null || turtleEntity.isDead()) return;
+        if (!spawned) return;
         if (!owner.isOnline()) { despawn(); return; }
 
-        tickCounter += 0.08;
+        if (turtleEntity == null || !turtleEntity.isValid() || turtleEntity.isDead()) {
+            // Auto-respawn if chunk unloaded or entity somehow removed
+            if (petData.isVisible() && !petData.isFainted()) {
+                despawn();
+                spawn();
+            } else {
+                despawn();
+            }
+            return;
+        }
+
+        // TPS-independent float animation using system time
+        tickCounter = (System.currentTimeMillis() % 10000L) / 1000.0 * Math.PI;
         double floatOffset = Math.sin(tickCounter) * 0.1;
 
         Location targetRaw = behindPlayer(owner, 1.5).add(0, 1.2 + floatOffset, 0);

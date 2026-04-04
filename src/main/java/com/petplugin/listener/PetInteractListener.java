@@ -6,6 +6,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.entity.EntityInteractEvent;
+import org.bukkit.event.entity.EntityTargetEvent;
 
 /**
  * Detects Shift+click on an active pet entity → open PetMainGUI.
@@ -37,5 +39,21 @@ public class PetInteractListener implements Listener {
         if (pet == null) return;
 
         plugin.getPetMainGUI().open(player);
+    }
+
+    @EventHandler
+    public void onEntityInteract(EntityInteractEvent event) {
+        if (plugin.getPetManager().isPetEntity(event.getEntity())) {
+            // Prevent pets from triggering pressure plates, tripwires, etc.
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onEntityTarget(EntityTargetEvent event) {
+        if (event.getTarget() != null && plugin.getPetManager().isPetEntity(event.getTarget())) {
+            // Prevent hostile mobs from targeting pets
+            event.setCancelled(true);
+        }
     }
 }

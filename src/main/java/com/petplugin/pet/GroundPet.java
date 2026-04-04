@@ -37,7 +37,7 @@ public class GroundPet extends PetEntity {
 
         // --- Safety flags (same as FloatPet Turtle) ---
         petEntity.setInvulnerable(true);
-        petEntity.setPersistent(true);
+        petEntity.setPersistent(false); // DO NOT save to disk
         petEntity.setSilent(true);
 
         int maxHp = petData.getType().getBaseHp() + petData.getLevel() * 2;
@@ -64,8 +64,19 @@ public class GroundPet extends PetEntity {
 
     @Override
     public void tick() {
-        if (!spawned || petEntity == null || petEntity.isDead()) return;
+        if (!spawned) return;
         if (!owner.isOnline()) { despawn(); return; }
+
+        if (petEntity == null || !petEntity.isValid() || petEntity.isDead()) {
+            // Auto-respawn if chunk unloaded or entity somehow removed
+            if (petData.isVisible() && !petData.isFainted()) {
+                despawn();
+                spawn();
+            } else {
+                despawn();
+            }
+            return;
+        }
 
         Location targetLoc = FloatPet.behindPlayer(owner, 2.0);
         double dist = petEntity.getLocation().distance(owner.getLocation());

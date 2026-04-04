@@ -62,14 +62,22 @@ public class QuestResetScheduler extends BukkitRunnable {
     }
 
     private void resetDaily(PetData pet) {
-        for (DailyQuest q : DailyQuest.ALL) {
-            pet.resetQuestProgress(q.getId());
-        }
+        pet.getQuestProgress().keySet().removeIf(k -> {
+            try {
+                return QuestType.valueOf(k).isDaily();
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+        });
     }
 
     private void resetWeekly(PetData pet) {
-        for (WeeklyQuest q : WeeklyQuest.ALL) {
-            pet.resetQuestProgress(q.getId());
-        }
+        pet.getQuestProgress().keySet().removeIf(k -> {
+            try {
+                return QuestType.valueOf(k).isWeekly();
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+        });
     }
 }

@@ -15,6 +15,7 @@ import com.petplugin.quest.QuestResetScheduler;
 import com.petplugin.quest.QuestTracker;
 import com.petplugin.skill.StatusEffectManager;
 import com.petplugin.util.ChatUtil;
+import com.petplugin.util.LangManager;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -39,6 +40,7 @@ public final class PetPlugin extends JavaPlugin {
     private QuestTracker questTracker;
     private QuestResetScheduler questResetScheduler;
     private PetRespawnManager petRespawnManager;
+    private LangManager langManager;
 
     // ---- GUI ----
     private PetSelectGUI petSelectGUI;
@@ -53,7 +55,10 @@ public final class PetPlugin extends JavaPlugin {
         // Config
         saveDefaultConfig();
 
-        // Data layer
+        // Data layer & Lang
+        langManager = new LangManager(this);
+        langManager.load();
+        
         dataManager = new YamlDataManager(this);
 
         // Core systems
@@ -91,11 +96,12 @@ public final class PetPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new BattleListener(this),       this);
         getServer().getPluginManager().registerEvents(new PetDamageListener(this),    this);
         getServer().getPluginManager().registerEvents(new MysteryEggListener(this),   this);
-        // PlayerJoin hook for waitingRespawn
+        // PlayerJoin hook for waitingRespawn & Snapshot recover
         getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
             @org.bukkit.event.EventHandler
             public void onJoin(org.bukkit.event.player.PlayerJoinEvent e) {
                 petRespawnManager.checkWaitingRespawn(e.getPlayer());
+                com.petplugin.battle.InventorySnapshot.restoreIfPresent(e.getPlayer());
             }
         }, this);
 
@@ -398,4 +404,5 @@ public final class PetPlugin extends JavaPlugin {
     public RankGUI getRankGUI()                         { return rankGUI; }
     public PetSelectorGUI getPetSelectorGUI()           { return petSelectorGUI; }
     public PetRespawnManager getPetRespawnManager()     { return petRespawnManager; }
+    public LangManager getLang()                        { return langManager; }
 }

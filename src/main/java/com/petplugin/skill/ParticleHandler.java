@@ -7,11 +7,43 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Centralized particle spawning for skills and status effects.
  * All spawns happen on the server thread (called from BattleSession / skill execute).
  */
 public final class ParticleHandler {
+
+    private static final Map<UUID, Long> lastSpawns = new ConcurrentHashMap<>();
+    private static final Map<UUID, Integer> spawnCounts = new ConcurrentHashMap<>();
+    private static final int MAX_PARTICLES_PER_SECOND = 150;
+
+    private static boolean allowSpawn(Location loc) {
+        if (loc.getWorld() == null || loc.getWorld().getPlayers().isEmpty()) return true;
+        // Find nearest player to rate limit based on visual impact
+        Player nearest = null;
+        double minDist = Double.MAX_VALUE;
+        for (Player p : loc.getWorld().getPlayers()) {
+            double d = p.getLocation().distanceSquared(loc);
+            if (d < minDist) { minDist = d; nearest = p; }
+        }
+        if (nearest == null || minDist > 100 * 100) return false;
+
+        UUID id = nearest.getUniqueId();
+        long now = System.currentTimeMillis() / 1000;
+        lastSpawns.putIfAbsent(id, now);
+        if (lastSpawns.get(id) < now) {
+            lastSpawns.put(id, now);
+            spawnCounts.put(id, 0);
+        }
+        int count = spawnCounts.getOrDefault(id, 0);
+        if (count > MAX_PARTICLES_PER_SECOND) return false;
+        spawnCounts.put(id, count + 1);
+        return true;
+    }
 
     private ParticleHandler() {}
 

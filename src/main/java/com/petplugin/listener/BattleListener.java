@@ -13,6 +13,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.meta.BookMeta;
 
@@ -130,6 +133,35 @@ public class BattleListener implements Listener {
         BattleSession session = plugin.getBattleManager().getSession(player.getUniqueId());
         if (session != null && session.isActive()) {
             session.forfeit(player.getUniqueId());
+        }
+    }
+
+    /** Lockdown commands during battle. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onCommand(PlayerCommandPreprocessEvent event) {
+        Player player = event.getPlayer();
+        if (!ArenaManager.isFrozen(player.getUniqueId())) return;
+        
+        String msg = event.getMessage().toLowerCase();
+        if (!msg.startsWith("/petbattle surrender") && !msg.startsWith("/petbattle forfeit")) {
+            event.setCancelled(true);
+            player.sendMessage(ChatUtil.color("&cBạn không thể dùng lệnh trong trân đấu ngoại trừ /petbattle surrender."));
+        }
+    }
+
+    /** Prevent opening chests/crafting during battle. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+        if (!ArenaManager.isFrozen(player.getUniqueId())) return;
+        
+        // Allow ONLY our own custom menus. Our custom menus have titles or are CHEST type without a block hook.
+        // Easiest hook: ArenaManager.isFrozen + they try to open something. 
+        // Battle GUI itself is handled via player.openInventory but wait, that triggers InventoryOpenEvent!
+        // We can check if the title starts with "⚔ Chọn Skill"
+        String title = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.getView().title());
+        if (!title.contains("Chọn Skill")) {
+            event.setCancelled(true);
         }
     }
 }

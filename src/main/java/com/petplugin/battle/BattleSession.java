@@ -291,8 +291,18 @@ public class BattleSession {
     }
 
     private boolean checkWin() {
-        if (hpB <= 0) { end(playerA, false); return true; }
-        if (hpA <= 0) { end(playerB, false); return true; }
+        if (petA.isFainted() && petB.isFainted()) {
+            end(null, false); // Draw
+            return true;
+        }
+
+        if (petA.isFainted()) {
+            end(playerB, false);
+            return true;
+        } else if (petB.isFainted()) {
+            end(playerA, false);
+            return true;
+        }
         return false;
     }
 

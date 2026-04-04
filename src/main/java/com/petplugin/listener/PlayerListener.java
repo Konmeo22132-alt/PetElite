@@ -13,6 +13,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.inventory.ItemStack;
 
@@ -77,8 +78,12 @@ public class PlayerListener implements Listener {
                 && event.getFrom().getBlockY() == event.getTo().getBlockY()
                 && event.getFrom().getBlockZ() == event.getTo().getBlockZ()) return;
 
-        // Calculate distance (integer blocks for performance)
+        // Filter vehicles and teleports (large distance)
+        if (player.isInsideVehicle()) return;
+
         double dist = event.getFrom().distance(event.getTo());
+        if (dist > 5.0) return; // likely a teleport or high speed boost
+
         int blocksMoved = (int) Math.ceil(dist);
 
         plugin.getQuestTracker().increment(player, QuestType.WALK_BLOCKS, blocksMoved);
@@ -87,7 +92,18 @@ public class PlayerListener implements Listener {
 
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
-        Player killer = event.getPlayer().getKiller();
+        Player player = event.getPlayer();
+        
+        // Clear all status effects
+        plugin.getStatusEffectManager().clearAll(player.getUniqueId());
+
+        // Forfeit battle if they die during it
+        com.petplugin.battle.BattleSession session = plugin.getBattleManager().getSession(player.getUniqueId());
+        if (session != null && session.isActive()) {
+            session.forfeit(player.getUniqueId());
+        }
+
+        Player killer = player.getKiller();
         if (killer == null) return;
         plugin.getQuestTracker().increment(killer, QuestType.KILL_PLAYERS, 1);
     }
@@ -119,12 +135,28 @@ public class PlayerListener implements Listener {
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         if (!(event.getDamager() instanceof Player player)) return;
 
+        // Skip if in battle (passives suppressed)
+        if (plugin.getBattleManager().getSession(player.getUniqueId()) != null) return;
+
         // Trigger pet passive skill on combat hit
-        com.petplugin.pet.PetEntity pet = plugin.getPetManager().getActivePet(player.getUniqueId());
-        if (pet != null && pet.isSpawned()) {
-            if (event.getEntity() instanceof org.bukkit.entity.LivingEntity target) {
-                pet.onPassiveSkillTrigger(target);
+        com.petplugin.pet.PetEntity petEntity = plugin.getPetManager().getActivePet(player.getUniqueId());
+        if (petEntity != null && petEntity.isSpawned()) {
+            com.petplugin.data.PetData data = petEntity.getPetData();
+            // Must be visible and not fainted
+            if (data.isVisible() && !data.isFainted()) {
+                if (event.getEntity() instanceof org.bukkit.entity.LivingEntity target) {
+                    petEntity.onPassiveSkillTrigger(target);
+                }
             }
+        }
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        String title = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(event.getView().title());
+        if (title.contains("Pet Menu") || title.contains("Skill Tree") || title.contains("Quest") ||
+            title.contains("Rank") || title.contains("Chọn Pet") || title.contains("Đổi Pet") || title.contains("Chọn Skill")) {
+            event.setCancelled(true);
         }
     }
 }
