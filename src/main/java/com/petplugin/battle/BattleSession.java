@@ -10,7 +10,6 @@ import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 
@@ -59,7 +58,7 @@ public class BattleSession {
     private int berserkerDmgA = 0, berserkerDmgB = 0;           // accumulated damage during window
 
     // Scheduled regen tasks
-    private final List<BukkitRunnable> activeScheduled = new ArrayList<>();
+    private final List<Object> activeScheduled = new ArrayList<>();
 
     // Active status effects in battle (type -> turns remaining)
     private final Map<StatusEffectType, Integer> battleEffectsA = new EnumMap<>(StatusEffectType.class);
@@ -254,10 +253,15 @@ public class BattleSession {
         if (checkWin()) return;
 
         // Update book
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        Runnable updateBookTask = () -> {
             BookSkillHandler.giveSkillBook(playerA, petA, ppA);
             BookSkillHandler.giveSkillBook(playerB, petB, ppB);
-        }, 2L);
+        };
+        if (com.petplugin.util.FoliaUtil.IS_FOLIA) {
+            user.getScheduler().runDelayed(plugin, task -> updateBookTask.run(), null, 2L);
+        } else {
+            Bukkit.getScheduler().runTaskLater(plugin, updateBookTask, 2L);
+        }
 
         // Clear the current player's temp modifiers — DEF bonus / damage reduction
         // are granted for ONE turn and should expire after the player's own turn ends.
@@ -581,9 +585,9 @@ public class BattleSession {
     public void scheduleRegen(Player owner, int healAmount, int intervalTurns, int maxTicks) {
         final int[] turnsElapsed = {0};
         final int[] healsLeft = {maxTicks};
-        BukkitRunnable task = new BukkitRunnable() {
+        Runnable regenTask = new Runnable() {
             @Override public void run() {
-                if (phase == Phase.ENDED || healsLeft[0] <= 0) { cancel(); return; }
+                if (phase == Phase.ENDED || healsLeft[0] <= 0) return;
                 turnsElapsed[0]++;
                 if (turnsElapsed[0] % intervalTurns == 0) {
                     healPet(owner, healAmount);
@@ -591,7 +595,20 @@ public class BattleSession {
                 }
             }
         };
-        task.runTaskTimer(plugin, 20L, 20L); // check every second; turn-based approximation
+        Object task;
+        if (com.petplugin.util.FoliaUtil.IS_FOLIA) {
+            task = owner.getScheduler().runAtFixedRate(plugin, t -> {
+                regenTask.run();
+                if (phase == Phase.ENDED || healsLeft[0] <= 0) t.cancel();
+            }, null, 20L, 20L);
+        } else {
+            org.bukkit.scheduler.BukkitTask bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
+                @Override public void run() {
+                    regenTask.run();
+                }
+            }, 20L, 20L);
+            task = bukkitTask;
+        }
         activeScheduled.add(task);
     }
 
@@ -605,23 +622,25 @@ public class BattleSession {
             berserkerHitsB = hits; berserkerFractionB = fraction; berserkerDmgB = 0;
         }
         // After a delay, resolve the accumulated damage as healing
-        BukkitRunnable task = new BukkitRunnable() {
-            @Override public void run() {
-                if (phase == Phase.ENDED) { cancel(); return; }
-                boolean isA = (owner == playerA);
-                int accumulated = isA ? berserkerDmgA : berserkerDmgB;
-                double frac = isA ? berserkerFractionA : berserkerFractionB;
-                int heal = (int)(accumulated * frac);
-                if (heal > 0) {
-                    healPet(owner, heal);
-                    owner.sendMessage(ChatUtil.color("&6✦ Berserker Heal! Hồi &f" + heal + " &6HP!"));
-                }
-                if (isA) { berserkerHitsA = 0; berserkerDmgA = 0; }
-                else     { berserkerHitsB = 0; berserkerDmgB = 0; }
-                cancel();
+        Runnable berserkTask = () -> {
+            if (phase == Phase.ENDED) return;
+            boolean isA = (owner == playerA);
+            int accumulated = isA ? berserkerDmgA : berserkerDmgB;
+            double frac = isA ? berserkerFractionA : berserkerFractionB;
+            int heal = (int)(accumulated * frac);
+            if (heal > 0) {
+                healPet(owner, heal);
+                owner.sendMessage(ChatUtil.color("&6✦ Berserker Heal! Hồi &f" + heal + " &6HP!"));
             }
+            if (isA) { berserkerHitsA = 0; berserkerDmgA = 0; }
+            else     { berserkerHitsB = 0; berserkerDmgB = 0; }
         };
-        task.runTaskLaterAsynchronously(plugin, 100L); // ~5s window
+        Object task;
+        if (com.petplugin.util.FoliaUtil.IS_FOLIA) {
+            task = owner.getScheduler().runDelayed(plugin, t -> berserkTask.run(), null, 100L);
+        } else {
+            task = Bukkit.getScheduler().runTaskLater(plugin, berserkTask, 100L);
+        }
         activeScheduled.add(task);
     }
 

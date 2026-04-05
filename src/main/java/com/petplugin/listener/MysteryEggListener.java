@@ -113,17 +113,15 @@ public class MysteryEggListener implements Listener {
         final int[] tick   = { 0 };
         final int[] nameIdx = { 0 };
 
-        new BukkitRunnable() {
+        Runnable animationTask = new Runnable() {
             @Override
             public void run() {
-                if (!player.isOnline()) { cancel(); return; }
+                if (!player.isOnline()) return;
 
                 int t = tick[0];
 
                 if (t >= TOTAL_TICKS) {
-                    // Done
-                    cancel();
-                    finalisePet(player, chosen, eggItem);
+                    // Done is handled inside the scheduler loop check
                     return;
                 }
 
@@ -163,7 +161,32 @@ public class MysteryEggListener implements Listener {
 
                 tick[0]++;
             }
-        }.runTaskTimer(plugin, 0L, 1L);
+        };
+
+        if (com.petplugin.util.FoliaUtil.IS_FOLIA) {
+            player.getScheduler().runAtFixedRate(plugin, task -> {
+                if (!player.isOnline()) { task.cancel(); return; }
+                if (tick[0] >= TOTAL_TICKS) {
+                    task.cancel();
+                    finalisePet(player, chosen, eggItem);
+                    return;
+                }
+                animationTask.run();
+            }, null, 1L, 1L);
+        } else {
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (!player.isOnline()) { cancel(); return; }
+                    if (tick[0] >= TOTAL_TICKS) {
+                        cancel();
+                        finalisePet(player, chosen, eggItem);
+                        return;
+                    }
+                    animationTask.run();
+                }
+            }.runTaskTimer(plugin, 0L, 1L);
+        }
     }
 
     private void finalisePet(Player player, PetType chosen, ItemStack eggItem) {

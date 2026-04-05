@@ -3,10 +3,11 @@ package com.petplugin.pet;
 import com.petplugin.PetPlugin;
 import com.petplugin.data.PetData;
 import com.petplugin.util.ChatUtil;
+import com.petplugin.util.FoliaUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.UUID;
 
@@ -65,29 +66,32 @@ public class PetRespawnManager {
         }
 
         // Schedule respawn
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                PetData freshData = plugin.getDataManager().getActivePet(ownerUuid);
-                if (freshData == null) return;
+        Runnable respawnTask = () -> {
+            PetData freshData = plugin.getDataManager().getActivePet(ownerUuid);
+            if (freshData == null) return;
 
-                Player onlineOwner = plugin.getServer().getPlayer(ownerUuid);
-                if (onlineOwner != null && onlineOwner.isOnline()) {
-                    // Heal to 50% and respawn
-                    freshData.setFainted(false);
-                    freshData.setWaitingRespawn(false);
-                    plugin.getDataManager().savePet(freshData);
-                    plugin.getPetManager().summon(onlineOwner);
-                    onlineOwner.sendMessage(ChatUtil.color(
-                            "&a&e" + freshData.getName() + " &ahas recovered and returned!"));
-                } else {
-                    // Player offline — flag for respawn on login
-                    freshData.setFainted(false);
-                    freshData.setWaitingRespawn(true);
-                    plugin.getDataManager().savePet(freshData);
-                }
+            Player onlineOwner = plugin.getServer().getPlayer(ownerUuid);
+            if (onlineOwner != null && onlineOwner.isOnline()) {
+                // Heal to 50% and respawn
+                freshData.setFainted(false);
+                freshData.setWaitingRespawn(false);
+                plugin.getDataManager().savePet(freshData);
+                plugin.getPetManager().summon(onlineOwner);
+                onlineOwner.sendMessage(ChatUtil.color(
+                        "&a&e" + freshData.getName() + " &ahas recovered and returned!"));
+            } else {
+                // Player offline — flag for respawn on login
+                freshData.setFainted(false);
+                freshData.setWaitingRespawn(true);
+                plugin.getDataManager().savePet(freshData);
             }
-        }.runTaskLater(plugin, RESPAWN_TICKS);
+        };
+
+        if (FoliaUtil.IS_FOLIA) {
+            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> respawnTask.run(), RESPAWN_TICKS);
+        } else {
+            Bukkit.getScheduler().runTaskLater(plugin, respawnTask, RESPAWN_TICKS);
+        }
     }
 
     /**
@@ -110,13 +114,23 @@ public class PetRespawnManager {
 
     private void playFaintParticles(Location loc) {
         if (loc == null || loc.getWorld() == null) return;
-        new BukkitRunnable() {
-            int ticks = 0;
-            @Override public void run() {
-                if (ticks >= 20) { cancel(); return; }
-                loc.getWorld().spawnParticle(Particle.LARGE_SMOKE, loc.add(0, 0.05, 0), 5, 0.3, 0.3, 0.3, 0.01);
-                ticks++;
+        
+        final int[] ticks = {0};
+        Runnable particleTask = new Runnable() {
+            public void run() {
+                if (ticks[0] >= 20) return;
+                loc.getWorld().spawnParticle(Particle.LARGE_SMOKE, loc.clone().add(0, 0.05, 0), 5, 0.3, 0.3, 0.3, 0.01);
+                ticks[0]++;
             }
-        }.runTaskTimer(plugin, 0L, 1L);
+        };
+
+        if (FoliaUtil.IS_FOLIA) {
+            Bukkit.getRegionScheduler().runAtFixedRate(plugin, loc, task -> {
+                particleTask.run();
+                if (ticks[0] >= 20) task.cancel();
+            }, 1L, 1L);
+        } else {
+            Bukkit.getScheduler().runTaskTimer(plugin, particleTask, 0L, 1L);
+        }
     }
 }

@@ -167,6 +167,18 @@ public final class PetPlugin extends JavaPlugin {
             return true;
         }
 
+        // /pet reload (Admin only)
+        if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
+            if (!player.isOp()) {
+                player.sendMessage(ChatUtil.color("&cYou don't have permission to use this command."));
+                return true;
+            }
+            reloadConfig();
+            langManager.load();
+            player.sendMessage(ChatUtil.color("&aPetPlugin configuration and language files reloaded."));
+            return true;
+        }
+
         // /pet set {rank|level|exp} <player> <value> — OP only (Task 3)
         if (args.length > 0 && args[0].equalsIgnoreCase("set")) {
             return handleSetCommand(player, args);
@@ -343,7 +355,10 @@ public final class PetPlugin extends JavaPlugin {
             if (args.length == 1) {
                 // Base subcommands
                 List<String> base = new ArrayList<>(Arrays.asList("recall", "egg"));
-                if (sender.isOp()) base.add("set");
+                if (sender.isOp()) {
+                    base.add("set");
+                    base.add("reload");
+                }
                 filterAndAdd(suggestions, base, args[0]);
 
             } else if (args.length == 2 && args[0].equalsIgnoreCase("set") && sender.isOp()) {

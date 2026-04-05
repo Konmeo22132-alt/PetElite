@@ -3,8 +3,9 @@ package com.petplugin.quest;
 import com.petplugin.PetPlugin;
 import com.petplugin.data.DataManager;
 import com.petplugin.data.PetData;
+import com.petplugin.util.FoliaUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -15,7 +16,7 @@ import java.time.temporal.TemporalAdjusters;
 /**
  * Runs every 60 seconds. Resets daily/weekly quest progress when appropriate.
  */
-public class QuestResetScheduler extends BukkitRunnable {
+public class QuestResetScheduler implements Runnable {
 
     private final PetPlugin plugin;
 
@@ -24,7 +25,11 @@ public class QuestResetScheduler extends BukkitRunnable {
     }
 
     public void start() {
-        runTaskTimer(plugin, 0L, 20L * 60); // every 60 seconds
+        if (FoliaUtil.IS_FOLIA) {
+            Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> run(), 20L, 20L * 60);
+        } else {
+            Bukkit.getScheduler().runTaskTimer(plugin, this, 0L, 20L * 60);
+        }
     }
 
     @Override

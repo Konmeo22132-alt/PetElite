@@ -2,27 +2,33 @@ package com.petplugin.pet;
 
 import com.petplugin.PetPlugin;
 import com.petplugin.data.PetData;
+import com.petplugin.util.FoliaUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Registry of all active pet entities.
- * Runs a task every tick to call PetEntity.tick() for FloatPet lerp.
+ * Runs a task every tick to call PetEntity.tick() for FloatPet lerp (on non-Folia).
  */
-public class PetManager extends BukkitRunnable {
+public class PetManager implements Runnable {
 
     private final PetPlugin plugin;
     // owner UUID -> active PetEntity
-    private final Map<UUID, PetEntity> activePets = new HashMap<>();
+    private final Map<UUID, PetEntity> activePets = new ConcurrentHashMap<>();
 
     public PetManager(PetPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void start() {
-        runTaskTimer(plugin, 1L, 1L); // every tick
+        if (FoliaUtil.IS_FOLIA) {
+            Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> run(), 1L, 1L);
+        } else {
+            Bukkit.getScheduler().runTaskTimer(plugin, this, 1L, 1L);
+        }
     }
 
     @Override
@@ -36,14 +42,37 @@ public class PetManager extends BukkitRunnable {
             java.util.Map.Entry<UUID, PetEntity> entry = it.next();
             PetEntity pet = entry.getValue();
 
-            if (pet.isSpawned()) {
-                pet.tick();
-            } else {
+            if (!pet.isSpawned()) {
                 // Pet is despawned; only keep it if the owner is online
                 // (they may recall/re-summon). Remove if owner is gone.
                 Player owner = org.bukkit.Bukkit.getPlayer(entry.getKey());
                 if (owner == null || !owner.isOnline()) {
                     it.remove();
+                }
+            } else {
+                // Task 2: Global respawn loop - catch entities removed by Paper's Activation Range
+                // or if their Folia entity scheduler stopped
+                org.bukkit.entity.Entity internalEntity = null;
+                if (pet instanceof FloatPet fp) internalEntity = fp.getTurtleEntity();
+                if (pet instanceof GroundPet gp) internalEntity = gp.getEntity();
+
+                if (internalEntity == null || !internalEntity.isValid() || internalEntity.isDead()) {
+                    Player owner = org.bukkit.Bukkit.getPlayer(entry.getKey());
+                    if (owner != null && owner.isOnline() && pet.getPetData().isVisible() && !pet.getPetData().isFainted()) {
+                        // Reschedule spawn on owner's region to avoid Folia thread issues
+                        if (FoliaUtil.IS_FOLIA) {
+                            owner.getScheduler().run(plugin, task -> {
+                                pet.despawn();
+                                pet.spawn();
+                            }, null);
+                        } else {
+                            pet.despawn();
+                            pet.spawn();
+                        }
+                    } else if (owner == null || !owner.isOnline()) {
+                        pet.despawn();
+                        it.remove();
+                    }
                 }
             }
         }
@@ -53,9 +82,14 @@ public class PetManager extends BukkitRunnable {
     //  Public API
     // ------------------------------------------------------------------ //
 
-    /** Summon the pet for a player. Loads PetData from DataManager. */
     public void summon(Player player) {
         if (activePets.containsKey(player.getUniqueId())) return; // already out
+
+        // Task 8: Entity cap check (skip if too many entities to prevent lag/crash)
+        if (player.getLocation().getChunk().getEntities().length > 100) {
+            player.sendMessage(net.kyori.adventure.text.Component.text("§cKhu vực này có quá nhiều thực thể! Không thể triệu hồi Pet."));
+            return;
+        }
 
         PetData petData = plugin.getDataManager().getActivePet(player.getUniqueId());
         if (petData == null) {

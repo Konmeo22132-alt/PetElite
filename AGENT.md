@@ -16,20 +16,31 @@ Paper 1.21.x plugin. Hệ thống pet cho server economy: chọn pet → progres
 ## Current Status
 > ⚠️ **Cập nhật phần này sau mỗi session**
 
-```
-[x] PetPlugin.java (main)  — PetSelectorGUI wired in
-[x] pet/ module   — FloatPet (BlockDisplay lerp), GroundPet (Tameable AI), PetManager (tick scheduler)
-[x] skill/ module — SkillTree (45 skills, 3 pets × 3 branches × 5), StatusEffectManager, ParticleHandler (full)
-[x] quest/ module — QuestTracker, QuestResetScheduler, DailyQuest/WeeklyQuest
-[x] battle/ module — BattleSession (extended modifiers), TurnManager, BookSkillHandler, BattleSkillClickHandler, EloManager, ArenaManager
-[x] data/ module  — DataManager interface, YamlDataManager (hasUsedFreeMysteryEgg persisted)
-[x] gui/ module   — PetSelectGUI, PetMainGUI (Mystery Egg + Pet Selector), SkillTreeGUI, QuestGUI, RankGUI, PetSelectorGUI [NEW]
-[x] listener/ module — PlayerListener, PetInteractListener, BattleListener
-[x] util/ module  — ChatUtil (Adventure API), GuiUtil
-```
+[x] PetPlugin.java (main)
+[x] pet/ module
+[x] skill/ module
+[x] quest/ module
+[x] battle/ module
+[x] data/ module
+[x] gui/ module
+[x] listener/ module
+[x] item/ module
+[x] pet/PetRespawnManager.java
+[x] util/ module
 
-**Last completed:** 2026-04-04 — Tasks 1/2/3: skill tree rework + full 45 skills + /pet GUI flow. `mvn clean package` → **BUILD SUCCESS** → `target/PetPlugin-1.0.0.jar`  
-**Next task:** Server-side testing and balance tuning.
+### v1.0.2 Task Status
+[x] TASK 1 — Folia Support: Created FoliaUtil, migrated all BukkitRunnable usages to Folia-compatible schedulers across all managers and entities.
+[x] TASK 2 — Turtle Rendering: Implemented fallback to direct position lerp on Turtle entity. Added global respawn loop to PetManager.run() for unloaded entities.
+[x] TASK 3 — Rank-up Pet Slot Unlock: Validate slots on join, GUI sync/logs.
+[x] TASK 4 — Rank GUI Error Handling: Global fail-safes and specific inventory try-catch block implemented.
+[x] TASK 5 — Multi-GUI Bug Exploits: Unified BaseGUI class, single GUIListener intercepting all inventory clicks.
+[x] TASK 6 — Basic Attack: Updated scheduler for Folia compatibility.
+[x] TASK 7 — Pet Follow Rework: GroundPet/FloatPet Folia-safe self-ticking, 2-block lerp per tick follow logic.
+[x] TASK 8 — Production Hardening: Atomic YAML saves via Bukkit AsyncScheduler, chunk entity cap > 100 check in PetManager.summon(), added /pet reload command.
+[x] TASK 9 — Versioning: Updated pom.xml to 1.0.2, plugin.yml with folia-supported: true.
+
+**Last completed:** 2026-04-05 v1.0.2 Production Hardening.
+**Next task:** Post-release monitoring, Pet evolution (placeholder), SQL DB transition.
 
 ---
 
@@ -217,17 +228,31 @@ NETHERITE: 5000+
 - **FloatPet material:** Dùng `TURTLE_EGG` BlockDisplay (0.7x scale). Có thể đổi sang `BlockDisplay` khác sau.
 - **GroundPet:** Spawn thực thể Wolf/Cat, tame cho owner → dùng vanilla follow AI. Có thể bị tấn công bởi mob khác — cần thêm invulnerable flag hoặc heal logic sau.
 
-### ✅ New decisions (2026-04-04 task session)
-- **Skill point pools:** ATK/DEF/HEAL have SEPARATE point pools. `grantLevelUpPoints()` uses `PetType.getAtkGain/defGain/healGain` per level. Turtle: +0/+2/+1; Wolf: +2/+1/+0; Cat: +1/+0/+2.
-- **Skills per pet:** Each of 3 pets has 15 unique skills (3 branches × 5) defined as anonymous inner classes in `SkillTree`. Skills reference new `BattleSession` API methods.
-- **BattleSession extended modifiers:** Added `atkReduction` (ATK debuff), `reflectFraction` (Thorn Armor), `dodgeChance + dodgeTurns` (probabilistic evasion), `dmgReductHits` (Reflex Guard), `statusImmune` (Stone Skin / Ghost Step), `lastStand` (Iron Will, once-per-battle), `rebirth` (Rebirth trigger at <20% HP, once-per-battle), `scheduleRegen` (periodic HP ticks), `startBerserkerHeal` (Berserker Heal 5-hit window).
-- **applyStatusEffect now respects statusImmuneA/B:** Status immunity granted by Stone Skin / Ghost Step blocks all status effects for N turns.
-- **ATK deduction with atkReductionA/B:** When the attacker has an ATK debuff, petAtk is multiplied by `(1 - atkReduction)` before `skill.executeInBattle()` is called.
-- **Mystery Egg (PetMainGUI slot 8):** Always visible. First use is free (glowing Dragon Egg). Subsequent uses show MYSTERY_EGG_COST (placeholder: 1000 coin). Economy hook is a TODO. `hasUsedFreeMysteryEgg` stored in PlayerData + YAML.
-- **PetSelectorGUI (PetMainGUI slot 11):** Only shown when `petSlots > 1`. Lists all owned pets with inline stats. Encodes petId in lore for safe retrieval. On click: recalls current pet, changes activePetId, summons new pet.
-- **Wild Stance condition check:** Wild Stance (Wolf DEF 4) checks HP at time of use. If HP ≥ 40%, the skill fires but grants no bonus — player still consumes PP. This is intentional to prevent trivial save-for-low-hp logic.
-- **Berserker Heal timing:** Uses a 5-second BukkitRunnable delay (`100L`). Runs `runTaskLaterAsynchronously` — this is intentional and safe because it only modifies BattleSession state through `healPet()` which is main-thread safe (called back via the scheduler).
-- **Life Drain (Cat HEAL 4):** Uses `dealDamageRaw` (bypasses DEF) + `healPet`. This is intentional — draining is a direct life-steal, not a blocked strike.
+### ✅ Fixed in 1.0.1 (2026-04-04 v1.0.1 patch)
+- **FloatPet (Turtle) not rendering:** Added explicit `setInvisible(false)` in spawn consumer lambda. Added debug logs on spawn and first tick. Turtle spawning confirmed via console log `[FloatPet] Spawned FloatPet for <player>`.
+- **Rank slot not unlocking on rank-up:** `EloManager.grantRankReward()` now uses `slotGranted` boolean flag, saves PlayerData AFTER incrementing slots, and sends explicit `★ Slot pet mới được mở khoá!` message with new slot count.
+- **Rank GUI crash:** Wrapped `rankGUI.open(player)` in `PetPlugin.handleBattleCommand()` with try-catch, logs full stack trace to console.
+- **Items can be taken from QuestGUI:** Added `@EventHandler onInventoryClick` and `onInventoryDrag` to `QuestGUI` class cancelling all events when title matches. Same applied to `RankGUI`.
+- **FloatPet follow improved:** lerp factor now 0.3 per tick when dist > 2 (was flat 0.12). Snap >10 blocks. Faces player yaw.
+- **GroundPet follow reworked:** AI fully disabled (`setAI(false)`) in spawn(). `tick()` uses manual lerp 0.3/tick (dist > 2) or hard snap (dist > 10). No pathfinder calls.
+- **BasicAttackHandler added:** New `listener/BasicAttackHandler.java`. Triggers on `EntityDamageByEntityEvent` when pet owner does melee damage. Pet dashes to target offset (0.5 blocks from face), CRIT × 6 particles, 25% base ATK bonus damage, `ENTITY_PLAYER_ATTACK_STRONG` sound (pitch 1.2). Returns after 6 ticks. 2s cooldown. Skips: in battle, fainted, hidden, target is pet.
+
+### ⚠️ New edge cases to watch (v1.0.1)
+- **BasicAttackHandler cooldown map leak:** `lastAttack` map in `BasicAttackHandler` is never cleaned up when player quits. Minor memory leak; entries expire naturally after 2s. Consider clearing on PlayerQuitEvent for cleanliness.
+- **GroundPet AI-off during respawn:** If GroundPet auto-respawns (tick finds entity invalid), the new entity also gets `setAI(false)` via `spawn()`. Confirmed correct.
+- **FloatPet `setInvisible(false)` note:** The Paper 1.21 `Turtle` entity requires the flag to be set INSIDE the spawn consumer lambda (before entity is added to world). Already done.
+- **GroundPet teleport-every-tick:** Teleporting ground mobs every tick may cause visual jitter on high-ping clients. Consider throttling to every 2-3 ticks if reported.
+
+- **FloatPet entity change:** No longer uses BlockDisplay. Now spawns a real `Turtle` entity (`EntityType.TURTLE`) with `setAI(false)`, `setSilent(true)`, `setInvulnerable(true)`, `setPersistent(true)`, `setGravity(false)`, `setAdult()`. Position lerped + float animation applied by calling `teleport()` each tick exactly like before.
+- **FloatPet.getTurtleEntity():** Renamed from `getDisplay()`. PetManager updated to call `getTurtleEntity()` in `isPetEntity()` and `getOwnerOf()`.
+- **GroundPet safety flags:** Wolf and Cat now also get `setInvulnerable(true)`, `setPersistent(true)`, `setSilent(true)` on spawn.
+- **Paper API note:** `Ageable.setBaby(boolean)` does NOT exist — use `setAdult()` to force adult state or `setBaby()` (no-arg) to force baby. This is a Paper/Bukkit quirk.
+- **MysteryEggListener rewrite:** 5-phase slot-machine animation (intervals: 1/2/4/6/10 ticks per switch), total 90 ticks. Spin shown via `sendActionBar()`. Final reveal via `sendTitle()` with type colour. Sound: `UI_BUTTON_CLICK` (pitch 1.5 fast → descending 1.4/1.2/1.0/0.8 slow), `ENTITY_PLAYER_LEVELUP` on reveal.
+- **`/pet set rank` command:** Sets both `rank` and `elo` to `tier.getMinElo()`. OP-only. Saves via `dataManager.savePlayer()`.
+- **`/pet set level` command:** Sets `pet.level` directly. If new level > old level, grants `(diff * type.getXxxGain())` extra points to each branch. Does NOT reset already-unlocked skills.
+- **`/pet set exp` command:** Sets `currentExp=0` then calls `pet.addExp(amount)` which triggers the full level-up loop.
+- **Tab completion:** `onTabComplete()` override in PetPlugin. `/pet` → recall/egg (+ set if OP). `/pet set` → rank/level/exp. `/pet set rank/level/exp <player>` → online players. `/pet set rank <player>` → tier names. `/pet set level <player>` → preset levels. `/petbattle` → challenge/accept/surrender/rank. `/petbattle challenge` → online players (excluding self).
+
 
 
 ---

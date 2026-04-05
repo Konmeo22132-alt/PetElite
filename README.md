@@ -6,7 +6,7 @@
 ![Paper](https://img.shields.io/badge/Paper-1.21.x-F7A800?style=for-the-badge&logo=papermc&logoColor=white)
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-1.0.1-6A0DAD?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.0.2-6A0DAD?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Release-22C55E?style=for-the-badge)
 
 ### *A Pokémon-inspired pet system for Minecraft economy servers.*
@@ -19,13 +19,14 @@ Choose your starter · Level up · Master skills · Battle for rank.
 
 ## 🔄 Latest Update
 
-### v1.0.1 — Patch
-- Fixed turtle pet not rendering
-- Fixed rank-up not unlocking pet slot
-- Fixed rank GUI crash on open
-- Fixed item theft from Quest GUI and all other GUIs
-- Added basic attack: pet dashes to target on player melee hit
-- Improved pet follow: stays within 2 blocks using manual position update
+### v1.0.2 — Production Hardening & Folia Support
+- Migrated all schedulers for full compatibility with Folia region threads.
+- Implemented global respawn loop and turtle direct-lerp for pet stability.
+- Enhanced rank GUI with global error-handling fail-safes and specific inventory try-catch block.
+- Implemented multi-GUI bug exploits prevention with a unified BaseGUI class.
+- Basic attack bug fixes and entity cap threshold checks implemented.
+- Added `/pet reload` command.
+- Asynchronous atomic YAML data saves for production performance.
 
 ## 🌟 Overview
 

@@ -6,6 +6,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import com.petplugin.util.FoliaUtil;
 
 import java.util.Map;
 import java.util.UUID;
@@ -46,6 +47,28 @@ public final class ParticleHandler {
     }
 
     private ParticleHandler() {}
+
+    private static void runEntityTimer(LivingEntity entity, Plugin plugin, long delay, long period, java.util.function.Consumer<Runnable> action) {
+        if (FoliaUtil.IS_FOLIA) {
+            entity.getScheduler().runAtFixedRate(plugin, scheduledTask -> {
+                action.accept(() -> scheduledTask.cancel());
+            }, null, Math.max(1L, delay), period);
+        } else {
+            new BukkitRunnable() {
+                @Override public void run() { action.accept(this::cancel); }
+            }.runTaskTimer(plugin, delay, period);
+        }
+    }
+
+    private static void runEntityLater(LivingEntity entity, Plugin plugin, long delay, Runnable action) {
+        if (FoliaUtil.IS_FOLIA) {
+            entity.getScheduler().runDelayed(plugin, task -> action.run(), null, Math.max(1L, delay));
+        } else {
+            new BukkitRunnable() {
+                @Override public void run() { action.run(); }
+            }.runTaskLater(plugin, delay);
+        }
+    }
 
     // ------------------------------------------------------------------ //
     //  Status effect ambient particles  (called every tick by StatusEffectManager)
@@ -121,17 +144,15 @@ public final class ParticleHandler {
 
     /** WATER_SPLASH spirals around 'from' then shoots toward 'to' — Tidal Strike. */
     public static void spawnWaterSplashSpiral(LivingEntity from, LivingEntity to, Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= 6) { cancel(); return; }
-                double angle = tick * Math.PI / 3;
-                Location loc = from.getLocation().add(
-                        Math.cos(angle) * 0.7, 1.0, Math.sin(angle) * 0.7);
-                loc.getWorld().spawnParticle(Particle.SPLASH, loc, 4, 0.1, 0.1, 0.1, 0.1);
-                tick++;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
+        final int[] tick = {0};
+        runEntityTimer(from, plugin, 0L, 1L, cancel -> {
+            if (tick[0] >= 6) { cancel.run(); return; }
+            double angle = tick[0] * Math.PI / 3;
+            Location loc = from.getLocation().add(
+                    Math.cos(angle) * 0.7, 1.0, Math.sin(angle) * 0.7);
+            loc.getWorld().spawnParticle(Particle.SPLASH, loc, 4, 0.1, 0.1, 0.1, 0.1);
+            tick[0]++;
+        });
         // Shoot toward target
         spawnCritLine(from, to, 5);
     }
@@ -144,17 +165,15 @@ public final class ParticleHandler {
 
     /** ENCHANT orbit around pet for duration — Hard Shell. */
     public static void spawnEnchantOrbit(LivingEntity entity, int durationTicks, Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= durationTicks || entity.isDead()) { cancel(); return; }
-                double angle = tick * Math.PI / 5;
-                Location loc = entity.getLocation().add(
-                        Math.cos(angle) * 0.8, 1.0, Math.sin(angle) * 0.8);
-                loc.getWorld().spawnParticle(Particle.ENCHANT, loc, 3, 0.1, 0.1, 0.1, 0.5);
-                tick++;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
+        final int[] tick = {0};
+        runEntityTimer(entity, plugin, 0L, 1L, cancel -> {
+            if (tick[0] >= durationTicks || entity.isDead()) { cancel.run(); return; }
+            double angle = tick[0] * Math.PI / 5;
+            Location loc = entity.getLocation().add(
+                    Math.cos(angle) * 0.8, 1.0, Math.sin(angle) * 0.8);
+            loc.getWorld().spawnParticle(Particle.ENCHANT, loc, 3, 0.1, 0.1, 0.1, 0.5);
+            tick[0]++;
+        });
     }
 
     /** CRIT from pet toward attacker — Thorn Armor reflect. */
@@ -164,30 +183,26 @@ public final class ParticleHandler {
 
     /** SMOKE_NORMAL dense cloud on self — Stone Skin. */
     public static void spawnSmokeDense(LivingEntity entity, int durationTicks, Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= durationTicks || entity.isDead()) { cancel(); return; }
-                entity.getWorld().spawnParticle(Particle.SMOKE,
-                        entity.getLocation().add(0, 0.8, 0), 6, 0.4, 0.5, 0.4, 0.02);
-                tick++;
-            }
-        }.runTaskTimer(plugin, 0L, 2L);
+        final int[] tick = {0};
+        runEntityTimer(entity, plugin, 0L, 2L, cancel -> {
+            if (tick[0] >= durationTicks || entity.isDead()) { cancel.run(); return; }
+            entity.getWorld().spawnParticle(Particle.SMOKE,
+                    entity.getLocation().add(0, 0.8, 0), 6, 0.4, 0.5, 0.4, 0.02);
+            tick[0]++;
+        });
     }
 
     /** VILLAGER_HAPPY orbit — Iron Fortress. */
     public static void spawnHappyOrbit(LivingEntity entity, int durationTicks, Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= durationTicks || entity.isDead()) { cancel(); return; }
-                double angle = tick * Math.PI / 4;
-                Location loc = entity.getLocation().add(
-                        Math.cos(angle), 1.0, Math.sin(angle));
-                loc.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, loc, 2, 0.1, 0.1, 0.1);
-                tick++;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
+        final int[] tick = {0};
+        runEntityTimer(entity, plugin, 0L, 1L, cancel -> {
+            if (tick[0] >= durationTicks || entity.isDead()) { cancel.run(); return; }
+            double angle = tick[0] * Math.PI / 4;
+            Location loc = entity.getLocation().add(
+                    Math.cos(angle), 1.0, Math.sin(angle));
+            loc.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, loc, 2, 0.1, 0.1, 0.1);
+            tick[0]++;
+        });
     }
 
     /** TOTEM erupt upward — Unbreakable, Iron Will, Ghost Step, Rebirth. */
@@ -213,30 +228,25 @@ public final class ParticleHandler {
     /** CRIT_MAGIC (green tinted) flows inward — Shell Mend, Primal Hunger. */
     public static void spawnEnchantedHitInflow(LivingEntity source, LivingEntity sink,
                                                 int count, Plugin plugin) {
-        new BukkitRunnable() {
-            int emitted = 0;
-            @Override public void run() {
-                if (emitted >= count) { cancel(); return; }
-                // spawn near source, drifts toward sink (visually)
-                Location loc = source.getLocation().clone().add(0, 1, 0);
-                loc.getWorld().spawnParticle(Particle.ENCHANTED_HIT, loc, 2,
-                        0.3, 0.3, 0.3, 0.05);
-                emitted++;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
+        final int[] emitted = {0};
+        runEntityTimer(source, plugin, 0L, 1L, cancel -> {
+            if (emitted[0] >= count) { cancel.run(); return; }
+            Location loc = source.getLocation().clone().add(0, 1, 0);
+            loc.getWorld().spawnParticle(Particle.ENCHANTED_HIT, loc, 2,
+                    0.3, 0.3, 0.3, 0.05);
+            emitted[0]++;
+        });
     }
 
     /** DRIP_WATER continuously around entity — Ocean Breath. */
     public static void spawnDripWater(LivingEntity entity, int durationTicks, Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= durationTicks || entity.isDead()) { cancel(); return; }
-                entity.getWorld().spawnParticle(Particle.DRIPPING_WATER,
-                        entity.getLocation().add(0, 1.5, 0), 3, 0.4, 0.1, 0.4, 0);
-                tick++;
-            }
-        }.runTaskTimer(plugin, 0L, 2L);
+        final int[] tick = {0};
+        runEntityTimer(entity, plugin, 0L, 2L, cancel -> {
+            if (tick[0] >= durationTicks || entity.isDead()) { cancel.run(); return; }
+            entity.getWorld().spawnParticle(Particle.DRIPPING_WATER,
+                    entity.getLocation().add(0, 1.5, 0), 3, 0.4, 0.1, 0.4, 0);
+            tick[0]++;
+        });
     }
 
     /** WATER_SPLASH column rising from feet — Ancient Tide. */
@@ -255,13 +265,12 @@ public final class ParticleHandler {
     }
 
     /** SWEEP_ATTACK twice 0.3s apart — Feral Slash. */
-    public static void spawnSweepDouble(Location loc, Plugin plugin) {
+    public static void spawnSweepDouble(LivingEntity entity, Plugin plugin) {
+        Location loc = entity.getLocation().add(0, 1, 0);
         loc.getWorld().spawnParticle(Particle.SWEEP_ATTACK, loc, 1, 0, 0, 0, 0);
-        new BukkitRunnable() {
-            @Override public void run() {
-                loc.getWorld().spawnParticle(Particle.SWEEP_ATTACK, loc, 1, 0, 0, 0, 0);
-            }
-        }.runTaskLater(plugin, 6L); // ~0.3s
+        runEntityLater(entity, plugin, 6L, () -> {
+            entity.getWorld().spawnParticle(Particle.SWEEP_ATTACK, entity.getLocation().add(0, 1, 0), 1, 0, 0, 0, 0);
+        });
     }
 
     /** VILLAGER_ANGRY (purple simulated by extra-spread angry) — Blood Fang. */
@@ -315,55 +324,46 @@ public final class ParticleHandler {
 
     /** HEART (dark) pulses — Wild Stance. */
     public static void spawnHeartPulse(LivingEntity entity, int pulses, Plugin plugin) {
-        new BukkitRunnable() {
-            int done = 0;
-            @Override public void run() {
-                if (done >= pulses || entity.isDead()) { cancel(); return; }
-                spawnHeartFloat(entity, 6);
-                done++;
-            }
-        }.runTaskTimer(plugin, 0L, 10L);
+        final int[] done = {0};
+        runEntityTimer(entity, plugin, 0L, 10L, cancel -> {
+            if (done[0] >= pulses || entity.isDead()) { cancel.run(); return; }
+            spawnHeartFloat(entity, 6);
+            done[0]++;
+        });
     }
 
     /** SWEEP_ATTACK × N sequential — Nine Lives Slash. */
-    public static void spawnSweepSequential(Location loc, int count, Plugin plugin) {
+    public static void spawnSweepSequential(LivingEntity entity, int count, Plugin plugin) {
         for (int i = 0; i < count; i++) {
-            final int idx = i;
-            new BukkitRunnable() {
-                @Override public void run() {
-                    loc.getWorld().spawnParticle(Particle.SWEEP_ATTACK, loc, 1, 0.1, 0.1, 0.1, 0);
-                }
-            }.runTaskLater(plugin, (long)(idx * 2)); // 0.1s apart (2 ticks)
+            runEntityLater(entity, plugin, (long)(i * 2), () -> {
+                entity.getWorld().spawnParticle(Particle.SWEEP_ATTACK, entity.getLocation().add(0, 1, 0), 1, 0.1, 0.1, 0.1, 0);
+            });
         }
     }
 
     /** CRIT_MAGIC white orbits fast — Nimble. */
     public static void spawnFastOrbit(LivingEntity entity, int durationTicks, Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= durationTicks || entity.isDead()) { cancel(); return; }
-                double angle = tick * Math.PI / 3;
-                Location loc = entity.getLocation().add(
-                        Math.cos(angle) * 0.6, 1.0, Math.sin(angle) * 0.6);
-                loc.getWorld().spawnParticle(Particle.ENCHANTED_HIT, loc, 1, 0, 0, 0, 0);
-                tick++;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
+        final int[] tick = {0};
+        runEntityTimer(entity, plugin, 0L, 1L, cancel -> {
+            if (tick[0] >= durationTicks || entity.isDead()) { cancel.run(); return; }
+            double angle = tick[0] * Math.PI / 3;
+            Location loc = entity.getLocation().add(
+                    Math.cos(angle) * 0.6, 1.0, Math.sin(angle) * 0.6);
+            loc.getWorld().spawnParticle(Particle.ENCHANTED_HIT, loc, 1, 0, 0, 0, 0);
+            tick[0]++;
+        });
     }
 
     /** CLOUD dense around entity — Smoke Veil / Catnap. */
     public static void spawnCloudCloud(LivingEntity entity, int durationTicks,
                                        double radius, Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= durationTicks || entity.isDead()) { cancel(); return; }
-                entity.getWorld().spawnParticle(Particle.CLOUD,
-                        entity.getLocation().add(0, 0.8, 0), 3, radius, 0.5, radius, 0.01);
-                tick++;
-            }
-        }.runTaskTimer(plugin, 0L, 2L);
+        final int[] tick = {0};
+        runEntityTimer(entity, plugin, 0L, 2L, cancel -> {
+            if (tick[0] >= durationTicks || entity.isDead()) { cancel.run(); return; }
+            entity.getWorld().spawnParticle(Particle.CLOUD,
+                    entity.getLocation().add(0, 0.8, 0), 3, radius, 0.5, radius, 0.01);
+            tick[0]++;
+        });
     }
 
     /** NOTE burst — Howl Heal. */
@@ -381,62 +381,56 @@ public final class ParticleHandler {
     /** CRIT_MAGIC slow stream from source to sink — Life Drain / Ocean Breath tether. */
     public static void spawnLifeDrainStream(LivingEntity source, LivingEntity sink,
                                              int durationTicks, Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= durationTicks || source.isDead()) { cancel(); return; }
-                Location from = source.getLocation().add(0, 1, 0);
-                Location to   = sink.getLocation().add(0, 1, 0);
-                double dx = to.getX() - from.getX();
-                double dy = to.getY() - from.getY();
-                double dz = to.getZ() - from.getZ();
-                double len = Math.sqrt(dx*dx + dy*dy + dz*dz);
-                if (len > 0) {
-                    double t = (double) tick / durationTicks;
-                    Location p = from.clone().add(dx*t, dy*t, dz*t);
-                    p.getWorld().spawnParticle(Particle.ENCHANTED_HIT, p, 2, 0.1, 0.1, 0.1, 0.02);
-                }
-                tick++;
+        final int[] tick = {0};
+        runEntityTimer(source, plugin, 0L, 1L, cancel -> {
+            if (tick[0] >= durationTicks || source.isDead()) { cancel.run(); return; }
+            Location from = source.getLocation().add(0, 1, 0);
+            Location to   = sink.getLocation().add(0, 1, 0);
+            double dx = to.getX() - from.getX();
+            double dy = to.getY() - from.getY();
+            double dz = to.getZ() - from.getZ();
+            double len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            if (len > 0) {
+                double t = (double) tick[0] / durationTicks;
+                Location p = from.clone().add(dx*t, dy*t, dz*t);
+                p.getWorld().spawnParticle(Particle.ENCHANTED_HIT, p, 2, 0.1, 0.1, 0.1, 0.02);
             }
-        }.runTaskTimer(plugin, 0L, 1L);
+            tick[0]++;
+        });
     }
 
     /** VILLAGER_HAPPY travels back/forth between two entities — Pack Bond. */
     public static void spawnHappyTether(LivingEntity a, LivingEntity b, int durationTicks,
                                          Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= durationTicks || a.isDead()) { cancel(); return; }
-                boolean forward = (tick % 20) < 10;
-                LivingEntity from = forward ? a : b;
-                LivingEntity to   = forward ? b : a;
-                spawnCritLine(from, to, 3); // reuse line, different particle below
-                Location fa = from.getLocation().add(0, 0.8, 0);
-                Location ta = to.getLocation().add(0, 0.8, 0);
-                Location mid = fa.clone().add(
-                        (ta.getX() - fa.getX()) / 2,
-                        (ta.getY() - fa.getY()) / 2,
-                        (ta.getZ() - fa.getZ()) / 2);
-                mid.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, mid, 1, 0, 0, 0, 0);
-                tick++;
-            }
-        }.runTaskTimer(plugin, 0L, 2L);
+        final int[] tick = {0};
+        runEntityTimer(a, plugin, 0L, 2L, cancel -> {
+            if (tick[0] >= durationTicks || a.isDead()) { cancel.run(); return; }
+            boolean forward = (tick[0] % 20) < 10;
+            LivingEntity from = forward ? a : b;
+            LivingEntity to   = forward ? b : a;
+            spawnCritLine(from, to, 3); // reuse line, different particle below
+            Location fa = from.getLocation().add(0, 0.8, 0);
+            Location ta = to.getLocation().add(0, 0.8, 0);
+            Location mid = fa.clone().add(
+                    (ta.getX() - fa.getX()) / 2,
+                    (ta.getY() - fa.getY()) / 2,
+                    (ta.getZ() - fa.getZ()) / 2);
+            mid.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, mid, 1, 0, 0, 0, 0);
+            tick[0]++;
+        });
     }
 
     /** Generic TOTEM + WATER_BUBBLE alternating orbit — Eternal Shell. */
     public static void spawnEternalShellAura(LivingEntity entity, int durationTicks, Plugin plugin) {
-        new BukkitRunnable() {
-            int tick = 0;
-            @Override public void run() {
-                if (tick >= durationTicks || entity.isDead()) { cancel(); return; }
-                double angle = tick * Math.PI / 4;
-                Location loc = entity.getLocation().add(
-                        Math.cos(angle) * 0.7, 1.0, Math.sin(angle) * 0.7);
-                Particle p = (tick % 2 == 0) ? Particle.TOTEM_OF_UNDYING : Particle.BUBBLE;
-                loc.getWorld().spawnParticle(p, loc, 2, 0.05, 0.05, 0.05, 0.05);
-                tick++;
-            }
-        }.runTaskTimer(plugin, 0L, 1L);
+        final int[] tick = {0};
+        runEntityTimer(entity, plugin, 0L, 1L, cancel -> {
+            if (tick[0] >= durationTicks || entity.isDead()) { cancel.run(); return; }
+            double angle = tick[0] * Math.PI / 4;
+            Location loc = entity.getLocation().add(
+                    Math.cos(angle) * 0.7, 1.0, Math.sin(angle) * 0.7);
+            Particle p = (tick[0] % 2 == 0) ? Particle.TOTEM_OF_UNDYING : Particle.BUBBLE;
+            loc.getWorld().spawnParticle(p, loc, 2, 0.05, 0.05, 0.05, 0.05);
+            tick[0]++;
+        });
     }
 }

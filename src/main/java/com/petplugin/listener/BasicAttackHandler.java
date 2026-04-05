@@ -122,22 +122,29 @@ public class BasicAttackHandler implements Listener {
         }
 
         // ---- Return after 6 ticks ----
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!player.isOnline()) return;
-                if (!petEntity.isSpawned()) return;
-                // Return to follow position behind player
-                Location returnLoc = FloatPet.behindPlayer(player, 1.5);
-                if (petEntity instanceof FloatPet) {
-                    returnLoc = returnLoc.add(0, 1.2, 0);
-                } else {
-                    returnLoc.setY(player.getLocation().getY());
-                }
-                returnLoc.setWorld(player.getWorld());
-                teleportPet(petEntity, returnLoc);
+        Runnable returnTask = () -> {
+            if (!player.isOnline()) return;
+            if (!petEntity.isSpawned()) return;
+            // Return to follow position behind player
+            Location returnLoc = FloatPet.behindPlayer(player, 1.5);
+            if (petEntity instanceof FloatPet) {
+                returnLoc = returnLoc.add(0, 1.2, 0);
+            } else {
+                returnLoc.setY(player.getLocation().getY());
             }
-        }.runTaskLater(plugin, RETURN_TICKS);
+            returnLoc.setWorld(player.getWorld());
+            teleportPet(petEntity, returnLoc);
+        };
+
+        Entity internalEntity = null;
+        if (petEntity instanceof FloatPet fp) internalEntity = fp.getTurtleEntity();
+        if (petEntity instanceof GroundPet gp) internalEntity = gp.getEntity();
+
+        if (internalEntity != null && com.petplugin.util.FoliaUtil.IS_FOLIA) {
+            internalEntity.getScheduler().runDelayed(plugin, task -> returnTask.run(), null, RETURN_TICKS);
+        } else {
+            org.bukkit.Bukkit.getScheduler().runTaskLater(plugin, returnTask, RETURN_TICKS);
+        }
     }
 
     // ---- Helpers ----

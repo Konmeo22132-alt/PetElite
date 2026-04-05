@@ -2,12 +2,11 @@ package com.petplugin.battle;
 
 import com.petplugin.PetPlugin;
 import com.petplugin.util.ChatUtil;
+import com.petplugin.util.FoliaUtil;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.title.Title;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -19,7 +18,8 @@ import java.util.UUID;
 public class TurnManager {
 
     private final PetPlugin plugin;
-    private final Map<UUID, BukkitRunnable> timers = new HashMap<>();
+    // Map of UUID -> the scheduled task object (ScheduledTask or BukkitTask)
+    private final Map<UUID, Object> timers = new HashMap<>();
 
     public TurnManager(PetPlugin plugin) {
         this.plugin = plugin;
@@ -32,30 +32,44 @@ public class TurnManager {
         final int timeoutSeconds = plugin.getConfig().getInt("battle.turn-timeout-seconds", 30);
         final int[] remaining = {timeoutSeconds};
 
-        BukkitRunnable timer = new BukkitRunnable() {
+        Runnable timerTask = new Runnable() {
             @Override
             public void run() {
-                if (!session.isActive()) { cancel(); return; }
+                if (!session.isActive()) { cancelTimer(activePlayer.getUniqueId()); return; }
                 remaining[0]--;
                 if (remaining[0] <= 0) {
-                    cancel();
-                    activePlayer.sendMessage(ChatUtil.color("&cHết giờ! Bạn tự động thua."));
+                    cancelTimer(activePlayer.getUniqueId());
+                    if (activePlayer.isOnline()) {
+                        activePlayer.sendMessage(ChatUtil.color("&cHết giờ! Bạn tự động thua."));
+                    }
                     session.forfeit(activePlayer.getUniqueId());
-                } else if (remaining[0] <= 5) {
+                } else if (remaining[0] <= 5 && activePlayer.isOnline()) {
                     Component actionBar = ChatUtil.color("&c⚠ Còn &f" + remaining[0] + "s &cđể chọn skill!");
                     activePlayer.sendActionBar(actionBar);
                 }
             }
         };
 
-        timers.put(activePlayer.getUniqueId(), timer);
-        timer.runTaskTimer(plugin, 20L, 20L);
+        Object task;
+        if (FoliaUtil.IS_FOLIA) {
+            task = activePlayer.getScheduler().runAtFixedRate(plugin, t -> timerTask.run(), null, 20L, 20L);
+        } else {
+            task = Bukkit.getScheduler().runTaskTimer(plugin, timerTask, 20L, 20L);
+        }
+        
+        timers.put(activePlayer.getUniqueId(), task);
     }
 
     public void cancelTimer(UUID uuid) {
-        BukkitRunnable existing = timers.remove(uuid);
+        Object existing = timers.remove(uuid);
         if (existing != null) {
-            try { existing.cancel(); } catch (Exception ignored) {}
+            try { 
+                if (FoliaUtil.IS_FOLIA) {
+                    ((io.papermc.paper.threadedregions.scheduler.ScheduledTask) existing).cancel();
+                } else {
+                    ((org.bukkit.scheduler.BukkitTask) existing).cancel();
+                }
+            } catch (Exception ignored) {}
         }
     }
 

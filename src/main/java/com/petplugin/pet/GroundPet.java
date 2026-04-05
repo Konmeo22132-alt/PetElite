@@ -1,8 +1,11 @@
 package com.petplugin.pet;
 
+import com.petplugin.PetPlugin;
 import com.petplugin.data.PetData;
 import com.petplugin.skill.ParticleHandler;
+import com.petplugin.util.FoliaUtil;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.*;
@@ -10,12 +13,13 @@ import org.bukkit.entity.*;
 /**
  * Wolf/Cat — Ground locomotion.
  *
- * Task 6 rework: manual position update, NO pathfinder AI.
+ * Task 6 / 7 rework: manual position update, NO pathfinder AI.
  *  • Target: 1.5 blocks behind player at ground level (same Y as player)
  *  • Distance > 10 → hard teleport snap
- *  • Distance > 2  → lerp 0.3 per tick toward target
+ *  • Distance > 2  → lerp 0.35 per tick toward target
  *  • Distance ≤ 2  → do nothing
  *  • Pet faces same direction as player (copyYaw) every tick
+ *  • Folia Self-ticking via EntityScheduler
  */
 public class GroundPet extends PetEntity {
 
@@ -24,6 +28,9 @@ public class GroundPet extends PetEntity {
     // Smoothed position for GroundPet
     private double smoothX, smoothY, smoothZ;
     private boolean smoothInit = false;
+
+    // Scheduler reference
+    private Object tickTask;
 
     public GroundPet(PetData petData, Player owner) {
         super(petData, owner);
@@ -65,10 +72,35 @@ public class GroundPet extends PetEntity {
         smoothZ = loc.getZ();
         smoothInit = true;
         spawned = true;
+
+        startTickLoop();
+    }
+
+    private void startTickLoop() {
+        PetPlugin plugin = org.bukkit.plugin.java.JavaPlugin.getPlugin(PetPlugin.class);
+        if (FoliaUtil.IS_FOLIA) {
+            tickTask = petEntity.getScheduler().runAtFixedRate(plugin, task -> {
+                tick();
+            }, null, 1L, 1L);
+        } else {
+            tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+        }
+    }
+
+    private void cancelTickLoop() {
+        if (tickTask != null) {
+            if (FoliaUtil.IS_FOLIA) {
+                ((io.papermc.paper.threadedregions.scheduler.ScheduledTask) tickTask).cancel();
+            } else {
+                ((org.bukkit.scheduler.BukkitTask) tickTask).cancel();
+            }
+            tickTask = null;
+        }
     }
 
     @Override
     public void despawn() {
+        cancelTickLoop();
         if (petEntity != null && !petEntity.isDead()) petEntity.remove();
         petEntity = null;
         spawned = false;
@@ -112,9 +144,9 @@ public class GroundPet extends PetEntity {
             smoothX = targetLoc.getX();
             smoothY = targetLoc.getY();
             smoothZ = targetLoc.getZ();
-        } else if (dist > 2.0) {
-            // Lerp 0.3 per tick
-            double lf = 0.3;
+        } else if (dist > 2.0) { // Task 7: 2-block tight follow
+            // Lerp 0.35 per tick
+            double lf = 0.35;
             smoothX += (targetLoc.getX() - smoothX) * lf;
             smoothY += (targetLoc.getY() - smoothY) * lf;
             smoothZ += (targetLoc.getZ() - smoothZ) * lf;

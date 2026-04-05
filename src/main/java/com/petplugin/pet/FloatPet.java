@@ -1,7 +1,9 @@
 package com.petplugin.pet;
 
+import com.petplugin.PetPlugin;
 import com.petplugin.data.PetData;
 import com.petplugin.skill.ParticleHandler;
+import com.petplugin.util.FoliaUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -11,11 +13,9 @@ import org.bukkit.entity.*;
 /**
  * Turtle — Float locomotion using a real TURTLE entity.
  *
- * Task 1 fix: replaced BlockDisplay egg with actual Turtle mob.
- *  • AI disabled, silent, invulnerable, persistent
- *  • Pokémon-style float: lerp Y toward player.y + 1.2, 1.5 blocks behind
- *  • Sine-wave float animation (±0.1 block)
- *  • Snap teleport if > 10 blocks away
+ * Task 1 fix: added Folia-compatible tick loop scheduling inside spawn().
+ * Task 2 fix: Fallback to direct position lerp on the Turtle entity itself to avoid passenger alignment issues.
+ * Task 7 fix: 2-block tight follow implemented.
  */
 public class FloatPet extends PetEntity {
 
@@ -25,6 +25,9 @@ public class FloatPet extends PetEntity {
     // Smoothed position
     private double smoothX, smoothY, smoothZ;
     private boolean firstTick = true;
+
+    // Scheduler reference
+    private Object tickTask;
 
     public FloatPet(PetData petData, Player owner) {
         super(petData, owner);
@@ -62,10 +65,35 @@ public class FloatPet extends PetEntity {
         smoothZ = loc.getZ();
         spawned = true;
         firstTick = true;
+
+        startTickLoop();
+    }
+
+    private void startTickLoop() {
+        PetPlugin plugin = org.bukkit.plugin.java.JavaPlugin.getPlugin(PetPlugin.class);
+        if (FoliaUtil.IS_FOLIA) {
+            tickTask = turtleEntity.getScheduler().runAtFixedRate(plugin, task -> {
+                tick();
+            }, null, 1L, 1L);
+        } else {
+            tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+        }
+    }
+
+    private void cancelTickLoop() {
+        if (tickTask != null) {
+            if (FoliaUtil.IS_FOLIA) {
+                ((io.papermc.paper.threadedregions.scheduler.ScheduledTask) tickTask).cancel();
+            } else {
+                ((org.bukkit.scheduler.BukkitTask) tickTask).cancel();
+            }
+            tickTask = null;
+        }
     }
 
     @Override
     public void despawn() {
+        cancelTickLoop();
         if (turtleEntity != null && !turtleEntity.isDead()) turtleEntity.remove();
         turtleEntity = null;
         spawned = false;
@@ -97,27 +125,34 @@ public class FloatPet extends PetEntity {
         double floatOffset = Math.sin(tickCounter) * 0.1;
 
         Location targetRaw = behindPlayer(owner, 1.5).add(0, 1.2 + floatOffset, 0);
+        double distSq = turtleEntity.getLocation().distanceSquared(targetRaw);
 
         // Snap if too far away (> 10 blocks)
-        double distSq = turtleEntity.getLocation().distanceSquared(targetRaw);
         if (distSq > 100.0) {
             smoothX = targetRaw.getX();
             smoothY = targetRaw.getY();
             smoothZ = targetRaw.getZ();
-        } else {
-            double lf = 0.12; // lerp factor
+            turtleEntity.teleport(new Location(owner.getWorld(), smoothX, smoothY, smoothZ,
+                    owner.getLocation().getYaw(), turtleEntity.getLocation().getPitch()));
+        } else if (distSq > 4.0) { // > 2 blocks
+            double lf = 0.35; // lerp factor
             smoothX += (targetRaw.getX() - smoothX) * lf;
             smoothY += (targetRaw.getY() - smoothY) * lf;
             smoothZ += (targetRaw.getZ() - smoothZ) * lf;
+            
+            // Clamp Y
+            double ownerY = owner.getLocation().getY();
+            smoothY = Math.min(smoothY, ownerY + 3.5);
+            smoothY = Math.max(smoothY, ownerY - 0.5);
+
+            turtleEntity.teleport(new Location(owner.getWorld(), smoothX, smoothY, smoothZ,
+                    owner.getLocation().getYaw(), turtleEntity.getLocation().getPitch()));
+        } else {
+            // Idle float animation only
+            smoothY += (targetRaw.getY() - smoothY) * 0.12;
+            turtleEntity.teleport(new Location(owner.getWorld(), smoothX, smoothY, smoothZ,
+                    owner.getLocation().getYaw(), turtleEntity.getLocation().getPitch()));
         }
-
-        // Clamp Y
-        double ownerY = owner.getLocation().getY();
-        smoothY = Math.min(smoothY, ownerY + 3.5);
-        smoothY = Math.max(smoothY, ownerY - 0.5);
-
-        turtleEntity.teleport(new Location(owner.getWorld(), smoothX, smoothY, smoothZ,
-                turtleEntity.getLocation().getYaw(), turtleEntity.getLocation().getPitch()));
     }
 
     @Override
@@ -141,7 +176,7 @@ public class FloatPet extends PetEntity {
     /**
      * Returns a location exactly {@code dist} blocks behind the player along their facing direction.
      */
-    static Location behindPlayer(Player player, double dist) {
+    public static Location behindPlayer(Player player, double dist) {
         Location loc = player.getLocation().clone();
         double yaw = Math.toRadians(loc.getYaw());
         loc.add(Math.sin(yaw) * dist, 0, -Math.cos(yaw) * dist);

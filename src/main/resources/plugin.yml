@@ -4,6 +4,7 @@ main: com.petplugin.PetPlugin
 api-version: '1.21'
 description: Pet management plugin with progression, skills, quests and battle system.
 authors: [PetPlugin Team]
+folia-supported: true
 
 commands:
   pet:

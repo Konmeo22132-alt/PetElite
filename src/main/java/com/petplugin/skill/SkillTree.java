@@ -295,7 +295,7 @@ public class SkillTree {
                 s.dealDamage(a, (int)(atk * 0.70));
                 s.dealDamage(a, (int)(atk * 0.70));
                 // SWEEP_ATTACK twice 0.3s apart
-                ParticleHandler.spawnSweepDouble(t.getLocation().add(0, 1, 0), s.getPlugin());
+                ParticleHandler.spawnSweepDouble(t, s.getPlugin());
             }
         };
 
@@ -527,7 +527,7 @@ public class SkillTree {
                     s.dealDamage(a, (int)(atk * 0.40));
                 }
                 // SWEEP_ATTACK × 9 sequential 0.1s apart
-                ParticleHandler.spawnSweepSequential(t.getLocation().add(0, 1, 0), 9, s.getPlugin());
+                ParticleHandler.spawnSweepSequential(t, 9, s.getPlugin());
             }
         };
 

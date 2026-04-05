@@ -1,11 +1,12 @@
 package com.petplugin.skill;
 
 import com.petplugin.PetPlugin;
+import com.petplugin.util.FoliaUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Ticks all active status effects on Living entities.
  * Runs every tick; damage is applied every 20 ticks per effect.
  */
-public class StatusEffectManager extends BukkitRunnable {
+public class StatusEffectManager implements Runnable {
 
     private final PetPlugin plugin;
 
@@ -27,7 +28,11 @@ public class StatusEffectManager extends BukkitRunnable {
     }
 
     public void start() {
-        runTaskTimer(plugin, 1L, 1L);
+        if (FoliaUtil.IS_FOLIA) {
+            Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, scheduledTask -> run(), 1L, 1L);
+        } else {
+            Bukkit.getScheduler().runTaskTimer(plugin, this, 1L, 1L);
+        }
     }
 
     @Override
