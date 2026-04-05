@@ -45,7 +45,19 @@ public class InventorySnapshot {
         config.set("contents", contents);
         config.set("armor", armorContents);
         config.set("offHand", offHand);
-        try { config.save(file); } catch (IOException ignored) {}
+        // AUDIT FIX: async save + log errors
+        PetPlugin plugin = JavaPlugin.getPlugin(PetPlugin.class);
+        Runnable saveTask = () -> {
+            try { config.save(file); }
+            catch (IOException e) {
+                plugin.getLogger().severe("[PetElite] Failed to save inventory snapshot for " + playerUuid + ": " + e.getMessage());
+            }
+        };
+        if (com.petplugin.util.FoliaUtil.IS_FOLIA) {
+            org.bukkit.Bukkit.getAsyncScheduler().runNow(plugin, task -> saveTask.run());
+        } else {
+            org.bukkit.Bukkit.getScheduler().runTaskAsynchronously(plugin, saveTask);
+        }
     }
 
     private void deleteFromDisk() {

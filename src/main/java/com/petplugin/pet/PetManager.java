@@ -11,31 +11,29 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Registry of all active pet entities.
- * Runs a task every tick to call PetEntity.tick() for FloatPet lerp (on non-Folia).
+ *
+ * TASK 3: PetManager no longer runs its own tick loop.
+ * Instead, GlobalTickRunnable calls tick() once per server tick.
+ * This reduces scheduler overhead from O(n) to O(1).
  */
-public class PetManager implements Runnable {
+public class PetManager {
 
     private final PetPlugin plugin;
     // owner UUID -> active PetEntity
     private final Map<UUID, PetEntity> activePets = new ConcurrentHashMap<>();
 
+    // AUDIT FIX: reverse entity lookup for O(1) isPetEntity / getOwnerOf
+    private final Map<Integer, UUID> entityIdToOwner = new ConcurrentHashMap<>();
+
     public PetManager(PetPlugin plugin) {
         this.plugin = plugin;
     }
 
-    public void start() {
-        if (FoliaUtil.IS_FOLIA) {
-            Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> run(), 1L, 1L);
-        } else {
-            Bukkit.getScheduler().runTaskTimer(plugin, this, 1L, 1L);
-        }
-    }
-
-    @Override
-    public void run() {
-        // Use iterator so we can remove stale entries in the same pass.
-        // FloatPet.tick() calls despawn() when owner goes offline, but does NOT
-        // remove itself from this map — we clean those up here.
+    /**
+     * TASK 3: Called by GlobalTickRunnable once per server tick.
+     * Replaces the old per-PetManager scheduled loop.
+     */
+    public void tick() {
         java.util.Iterator<java.util.Map.Entry<UUID, PetEntity>> it =
                 activePets.entrySet().iterator();
         while (it.hasNext()) {
@@ -43,39 +41,65 @@ public class PetManager implements Runnable {
             PetEntity pet = entry.getValue();
 
             if (!pet.isSpawned()) {
-                // Pet is despawned; only keep it if the owner is online
-                // (they may recall/re-summon). Remove if owner is gone.
                 Player owner = org.bukkit.Bukkit.getPlayer(entry.getKey());
                 if (owner == null || !owner.isOnline()) {
                     it.remove();
+                    removeEntityLookup(pet);
                 }
             } else {
-                // Task 2: Global respawn loop - catch entities removed by Paper's Activation Range
-                // or if their Folia entity scheduler stopped
-                org.bukkit.entity.Entity internalEntity = null;
-                if (pet instanceof FloatPet fp) internalEntity = fp.getTurtleEntity();
-                if (pet instanceof GroundPet gp) internalEntity = gp.getEntity();
+                // Check if internal entity is still valid
+                org.bukkit.entity.Entity internalEntity = getInternalEntity(pet);
 
                 if (internalEntity == null || !internalEntity.isValid() || internalEntity.isDead()) {
                     Player owner = org.bukkit.Bukkit.getPlayer(entry.getKey());
                     if (owner != null && owner.isOnline() && pet.getPetData().isVisible() && !pet.getPetData().isFainted()) {
-                        // Reschedule spawn on owner's region to avoid Folia thread issues
+                        removeEntityLookup(pet);
                         if (FoliaUtil.IS_FOLIA) {
                             owner.getScheduler().run(plugin, task -> {
                                 pet.despawn();
                                 pet.spawn();
+                                registerEntityLookup(pet, entry.getKey());
                             }, null);
                         } else {
                             pet.despawn();
                             pet.spawn();
+                            registerEntityLookup(pet, entry.getKey());
                         }
                     } else if (owner == null || !owner.isOnline()) {
                         pet.despawn();
                         it.remove();
+                        removeEntityLookup(pet);
                     }
+                } else {
+                    // Normal tick — call PetEntity.tick() for follow/animation
+                    pet.tick();
                 }
             }
         }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Entity lookup helpers (AUDIT FIX: O(1) lookups)
+    // ------------------------------------------------------------------ //
+
+    private void registerEntityLookup(PetEntity pet, UUID ownerUuid) {
+        org.bukkit.entity.Entity entity = getInternalEntity(pet);
+        if (entity != null) {
+            entityIdToOwner.put(entity.getEntityId(), ownerUuid);
+        }
+    }
+
+    private void removeEntityLookup(PetEntity pet) {
+        org.bukkit.entity.Entity entity = getInternalEntity(pet);
+        if (entity != null) {
+            entityIdToOwner.remove(entity.getEntityId());
+        }
+    }
+
+    private org.bukkit.entity.Entity getInternalEntity(PetEntity pet) {
+        if (pet instanceof FloatPet fp) return fp.getTurtleEntity();
+        if (pet instanceof GroundPet gp) return gp.getEntity();
+        return null;
     }
 
     // ------------------------------------------------------------------ //
@@ -83,9 +107,8 @@ public class PetManager implements Runnable {
     // ------------------------------------------------------------------ //
 
     public void summon(Player player) {
-        if (activePets.containsKey(player.getUniqueId())) return; // already out
+        if (activePets.containsKey(player.getUniqueId())) return;
 
-        // Task 8: Entity cap check (skip if too many entities to prevent lag/crash)
         if (player.getLocation().getChunk().getEntities().length > 100) {
             player.sendMessage(net.kyori.adventure.text.Component.text("§cKhu vực này có quá nhiều thực thể! Không thể triệu hồi Pet."));
             return;
@@ -100,22 +123,26 @@ public class PetManager implements Runnable {
         PetEntity pet = createPetEntity(petData, player);
         pet.spawn();
         activePets.put(player.getUniqueId(), pet);
+        registerEntityLookup(pet, player.getUniqueId());
     }
 
-    /** Recall (despawn) the pet. */
     public void recall(Player player) {
         if (player == null) return;
         PetEntity pet = activePets.remove(player.getUniqueId());
-        if (pet != null) pet.despawn();
+        if (pet != null) {
+            removeEntityLookup(pet);
+            pet.despawn();
+        }
     }
 
-    /** Force-recall by UUID (works even without a Player object). */
     public void forceRecall(java.util.UUID uuid) {
         PetEntity pet = activePets.remove(uuid);
-        if (pet != null) pet.despawn();
+        if (pet != null) {
+            removeEntityLookup(pet);
+            pet.despawn();
+        }
     }
 
-    /** Toggle between summon and recall. */
     public void toggle(Player player) {
         if (activePets.containsKey(player.getUniqueId())) {
             recall(player);
@@ -132,35 +159,22 @@ public class PetManager implements Runnable {
         return activePets.containsKey(ownerUuid);
     }
 
-    /** Despawn all pets — called on plugin disable. */
     public void despawnAll() {
         for (PetEntity pet : activePets.values()) {
             pet.despawn();
         }
         activePets.clear();
+        entityIdToOwner.clear();
     }
 
-    /** Check if an entity is an active pet entity. */
+    /** AUDIT FIX: O(1) check using reverse lookup map. */
     public boolean isPetEntity(org.bukkit.entity.Entity entity) {
-        for (PetEntity pet : activePets.values()) {
-            if (pet instanceof GroundPet gp && gp.getEntity() != null
-                    && gp.getEntity().getEntityId() == entity.getEntityId()) return true;
-            if (pet instanceof FloatPet fp && fp.getTurtleEntity() != null
-                    && fp.getTurtleEntity().getEntityId() == entity.getEntityId()) return true;
-        }
-        return false;
+        return entityIdToOwner.containsKey(entity.getEntityId());
     }
 
-    /** Get the owner UUID of a pet entity. */
+    /** AUDIT FIX: O(1) lookup using reverse lookup map. */
     public UUID getOwnerOf(org.bukkit.entity.Entity entity) {
-        for (Map.Entry<UUID, PetEntity> entry : activePets.entrySet()) {
-            PetEntity pet = entry.getValue();
-            if (pet instanceof GroundPet gp && gp.getEntity() != null
-                    && gp.getEntity().getEntityId() == entity.getEntityId()) return entry.getKey();
-            if (pet instanceof FloatPet fp && fp.getTurtleEntity() != null
-                    && fp.getTurtleEntity().getEntityId() == entity.getEntityId()) return entry.getKey();
-        }
-        return null;
+        return entityIdToOwner.get(entity.getEntityId());
     }
 
     // ------------------------------------------------------------------ //

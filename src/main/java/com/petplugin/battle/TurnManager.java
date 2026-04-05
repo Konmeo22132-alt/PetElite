@@ -19,7 +19,8 @@ public class TurnManager {
 
     private final PetPlugin plugin;
     // Map of UUID -> the scheduled task object (ScheduledTask or BukkitTask)
-    private final Map<UUID, Object> timers = new HashMap<>();
+    // AUDIT FIX: ConcurrentHashMap for thread safety
+    private final Map<UUID, Object> timers = new java.util.concurrent.ConcurrentHashMap<>();
 
     public TurnManager(PetPlugin plugin) {
         this.plugin = plugin;

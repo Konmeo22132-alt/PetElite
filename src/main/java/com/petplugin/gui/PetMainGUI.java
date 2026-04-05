@@ -20,11 +20,11 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.Inventory;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Main interaction GUI opened by /pet (when pet exists) or Shift+click on pet.
@@ -46,7 +46,8 @@ public class PetMainGUI implements Listener {
     private final PetPlugin plugin;
 
     // Players waiting to type a new name
-    private final Set<UUID> awaitingName = new HashSet<>();
+    // AUDIT FIX: ConcurrentHashMap.newKeySet() for thread safety (async chat)
+    private final Set<UUID> awaitingName = ConcurrentHashMap.newKeySet();
 
     public PetMainGUI(PetPlugin plugin) {
         this.plugin = plugin;
@@ -294,7 +295,7 @@ public class PetMainGUI implements Listener {
             return;
         }
 
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        Runnable renameTask = () -> {
             PetData pet = plugin.getDataManager().getActivePet(player.getUniqueId());
             if (pet == null) return;
             pet.setName(newName);
@@ -305,10 +306,21 @@ public class PetMainGUI implements Listener {
             if (petEntity != null) petEntity.updateDisplayName(newName);
 
             player.sendMessage(ChatUtil.color("&aTên pet đã được đổi thành: &f" + newName));
-        });
+        };
+        // AUDIT FIX: Folia-safe scheduler call
+        if (com.petplugin.util.FoliaUtil.IS_FOLIA) {
+            player.getScheduler().run(plugin, task -> renameTask.run(), null);
+        } else {
+            Bukkit.getScheduler().runTask(plugin, renameTask);
+        }
     }
 
     public boolean isAwaitingName(UUID uuid) {
         return awaitingName.contains(uuid);
+    }
+
+    /** AUDIT FIX: cleanup on PlayerQuitEvent. */
+    public void cleanupPlayer(UUID uuid) {
+        awaitingName.remove(uuid);
     }
 }

@@ -17,10 +17,10 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Task 2 — Mystery Egg right-click: slot-machine animation + sounds + actionbar spin.
@@ -64,10 +64,16 @@ public class MysteryEggListener implements Listener {
     private static final float[] SLOW_PITCHES = { 1.4f, 1.2f, 1.0f, 0.8f };
 
     private final PetPlugin plugin;
-    private final Map<UUID, Long> cooldowns = new HashMap<>();
+    // AUDIT FIX: ConcurrentHashMap for thread safety
+    private final Map<UUID, Long> cooldowns = new ConcurrentHashMap<>();
 
     public MysteryEggListener(PetPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    /** AUDIT FIX: cleanup on PlayerQuitEvent. */
+    public void cleanupPlayer(UUID uuid) {
+        cooldowns.remove(uuid);
     }
 
     @EventHandler

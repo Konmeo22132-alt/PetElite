@@ -9,19 +9,25 @@ import com.petplugin.util.ChatUtil;
 import org.bukkit.entity.Player;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Central registry for all challenges and active battle sessions.
+ *
+ * AUDIT FIX: all maps migrated to ConcurrentHashMap for thread safety.
+ * TASK 2: integrated with ArenaManager for arena selection + queuing.
  */
 public class BattleManager {
 
     private final PetPlugin plugin;
 
     // challenger UUID -> challenged UUID (pending challenges)
-    private final Map<UUID, UUID> pendingChallenges = new HashMap<>();
+    // AUDIT FIX: ConcurrentHashMap
+    private final Map<UUID, UUID> pendingChallenges = new ConcurrentHashMap<>();
 
     // player UUID -> their active session
-    private final Map<UUID, BattleSession> activeSessions = new HashMap<>();
+    // AUDIT FIX: ConcurrentHashMap
+    private final Map<UUID, BattleSession> activeSessions = new ConcurrentHashMap<>();
 
     public BattleManager(PetPlugin plugin) {
         this.plugin = plugin;
@@ -87,7 +93,37 @@ public class BattleManager {
             return;
         }
 
-        BattleSession session = new BattleSession(plugin, challenger, accepter, petA, petB);
+        // TASK 2: Check arena availability
+        if (!ArenaManager.hasArenas()) {
+            // No arenas registered — fall back to in-place battle
+            startBattle(challenger, accepter, petA, petB, false);
+            return;
+        }
+
+        ArenaManager.ArenaData arena = ArenaManager.findAvailableArena();
+        if (arena == null) {
+            challenger.sendMessage(ChatUtil.color("&eTất cả arena đang bận. Trận đấu sẽ bắt đầu tại chỗ."));
+            accepter.sendMessage(ChatUtil.color("&eTất cả arena đang bận. Trận đấu sẽ bắt đầu tại chỗ."));
+            startBattle(challenger, accepter, petA, petB, false);
+            return;
+        }
+
+        // Teleport to arena with countdown, then start battle
+        final PetData finalPetA = petA;
+        final PetData finalPetB = petB;
+        ArenaManager.teleportAndCountdown(plugin, challenger, accepter, arena, () -> {
+            startBattle(challenger, accepter, finalPetA, finalPetB, true);
+        });
+    }
+
+    private void startBattle(Player challenger, Player accepter,
+                              PetData petA, PetData petB, boolean inArena) {
+        // Double-check both still online
+        if (!challenger.isOnline() || !accepter.isOnline()) {
+            return;
+        }
+
+        BattleSession session = new BattleSession(plugin, challenger, accepter, petA, petB, inArena);
         activeSessions.put(challenger.getUniqueId(), session);
         activeSessions.put(accepter.getUniqueId(), session);
         session.start();
@@ -127,6 +163,12 @@ public class BattleManager {
             }
         }
         activeSessions.clear();
+    }
+
+    /** Clean up pending challenges for a disconnecting player. */
+    public void cleanupPlayer(UUID uuid) {
+        pendingChallenges.remove(uuid);
+        pendingChallenges.values().removeIf(v -> v.equals(uuid));
     }
 
     /**

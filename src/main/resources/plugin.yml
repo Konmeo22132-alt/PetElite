@@ -15,6 +15,10 @@ commands:
     description: Pet battle command.
     usage: /petbattle <challenge|accept|surrender> [player]
     permission: petplugin.battle
+  petop:
+    description: Pet admin/operator command.
+    usage: /petop <set|arena> [args]
+    permission: petplugin.admin
 
 permissions:
   petplugin.pet:

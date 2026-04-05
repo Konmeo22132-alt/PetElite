@@ -17,9 +17,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Task 5 — Basic Attack
@@ -44,10 +44,16 @@ public class BasicAttackHandler implements Listener {
     private final PetPlugin plugin;
 
     /** player UUID → cooldown (server tick when attack was last fired) */
-    private final Map<UUID, Long> lastAttack = new HashMap<>();
+    // AUDIT FIX: ConcurrentHashMap for thread safety
+    private final Map<UUID, Long> lastAttack = new ConcurrentHashMap<>();
 
     public BasicAttackHandler(PetPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    /** AUDIT FIX: cleanup on PlayerQuitEvent to prevent memory leak. */
+    public void cleanupPlayer(UUID uuid) {
+        lastAttack.remove(uuid);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

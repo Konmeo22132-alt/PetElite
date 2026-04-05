@@ -29,9 +29,6 @@ public class GroundPet extends PetEntity {
     private double smoothX, smoothY, smoothZ;
     private boolean smoothInit = false;
 
-    // Scheduler reference
-    private Object tickTask;
-
     public GroundPet(PetData petData, Player owner) {
         super(petData, owner);
     }
@@ -73,34 +70,14 @@ public class GroundPet extends PetEntity {
         smoothInit = true;
         spawned = true;
 
-        startTickLoop();
+        // TASK 3: No longer self-ticking. tick() is called by GlobalTickRunnable via PetManager.
     }
 
-    private void startTickLoop() {
-        PetPlugin plugin = org.bukkit.plugin.java.JavaPlugin.getPlugin(PetPlugin.class);
-        if (FoliaUtil.IS_FOLIA) {
-            tickTask = petEntity.getScheduler().runAtFixedRate(plugin, task -> {
-                tick();
-            }, null, 1L, 1L);
-        } else {
-            tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
-        }
-    }
 
-    private void cancelTickLoop() {
-        if (tickTask != null) {
-            if (FoliaUtil.IS_FOLIA) {
-                ((io.papermc.paper.threadedregions.scheduler.ScheduledTask) tickTask).cancel();
-            } else {
-                ((org.bukkit.scheduler.BukkitTask) tickTask).cancel();
-            }
-            tickTask = null;
-        }
-    }
 
     @Override
     public void despawn() {
-        cancelTickLoop();
+        // TASK 3: no tick loop to cancel — GlobalTickRunnable handles ticking
         if (petEntity != null && !petEntity.isDead()) petEntity.remove();
         petEntity = null;
         spawned = false;

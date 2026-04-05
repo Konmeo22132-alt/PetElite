@@ -10,6 +10,12 @@ battle:
   turn-timeout-seconds: 30
   # freeze players in place during battle (arena teleport placeholder)
   freeze-players: true
+  # Countdown before battle starts (seconds)
+  countdown_seconds: 3
+  # How often to check boundary violations (ticks)
+  arena_boundary_check_interval_ticks: 10
+  # Queue timeout (seconds) — how long to wait for arena before cancelling
+  queue_timeout_seconds: 60
 
 # Quest Targets
 quests:
@@ -53,3 +59,15 @@ rare-items:
   - END_CRYSTAL
   - SHULKER_BOX
   - NETHERITE_INGOT
+
+# Performance tuning for 200+ player servers
+performance:
+  # Max concurrent battles per arena (hard limit)
+  arena_max_concurrent_battles: 4
+  # Particle cull radius — skip particles if no player nearby (blocks)
+  particle_cull_radius: 20
+  # Flush in-memory cache to YAML every N seconds
+  data_flush_interval_seconds: 300
+
+# Debug mode — verbose logging
+debug: false

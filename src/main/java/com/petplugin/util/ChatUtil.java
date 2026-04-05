@@ -20,6 +20,11 @@ public final class ChatUtil {
         return text.replace('&', '§');
     }
 
+    /** Alias for colorLegacy — used by sendTitle which takes String, not Component. */
+    public static String legacyColor(String text) {
+        return text.replace('&', '§');
+    }
+
     /** Strip all color codes from a string. */
     public static String strip(String text) {
         return text.replaceAll("§[0-9a-fk-or]", "")

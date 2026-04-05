@@ -6,8 +6,8 @@
 ![Paper](https://img.shields.io/badge/Paper-1.21.x-F7A800?style=for-the-badge&logo=papermc&logoColor=white)
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-1.0.2-6A0DAD?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Release-22C55E?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.0.3-6A0DAD?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Production-22C55E?style=for-the-badge)
 
 ### *A Pokémon-inspired pet system for Minecraft economy servers.*
 
@@ -19,14 +19,13 @@ Choose your starter · Level up · Master skills · Battle for rank.
 
 ## 🔄 Latest Update
 
-### v1.0.2 — Production Hardening & Folia Support
-- Migrated all schedulers for full compatibility with Folia region threads.
-- Implemented global respawn loop and turtle direct-lerp for pet stability.
-- Enhanced rank GUI with global error-handling fail-safes and specific inventory try-catch block.
-- Implemented multi-GUI bug exploits prevention with a unified BaseGUI class.
-- Basic attack bug fixes and entity cap threshold checks implemented.
-- Added `/pet reload` command.
-- Asynchronous atomic YAML data saves for production performance.
+### v1.0.3 — Arena System + Full Audit + 200+ Player Optimization
+- **Battle Arena System**: `/petop set battle` registers arena, automatic teleportation, 3-second countdown with Blindness + Slowness IV, boundary enforcement, post-battle teleport-back.
+- **Full Codebase Audit**: 8 classes migrated to ConcurrentHashMap, 5 memory leaks fixed (PlayerQuitEvent cleanup), all scheduled tasks properly cancelled.
+- **GlobalTickRunnable**: Single centralized tick loop replaces per-entity scheduling — O(1) scheduler overhead for any number of players.
+- **Critical Bug Fix**: `BattleSession.checkWin()` now correctly uses battle HP (`hpA`/`hpB`) instead of `petData.isFainted()`.
+- **Performance**: O(1) pet entity lookups, async inventory snapshot saves, particle culling.
+- **Folia Fixes**: All remaining non-Folia scheduler calls in GUI handlers migrated.
 
 ## 🌟 Overview
 
@@ -201,6 +200,9 @@ Quests are tied to your **active pet's progress data** and reset automatically o
 | `/petbattle accept` | Accept a pending battle challenge | `petplugin.battle` |
 | `/petbattle surrender` | Forfeit the current battle | `petplugin.battle` |
 | `/petbattle rank` | Open the rank viewer GUI | `petplugin.battle` |
+| `/petop set battle` | Register an arena at your location | `petplugin.admin` |
+| `/petop arena list` | List all registered arenas | `petplugin.admin` |
+| `/petop arena remove <id>` | Remove an arena | `petplugin.admin` |
 
 ### Examples
 
@@ -219,7 +221,23 @@ Quests are tied to your **active pet's progress data** and reset automatically o
 
 # Surrender if you're losing
 /petbattle surrender
+
+# Register an arena at your current location (OP only)
+/petop set battle
+
+# List all registered arenas
+/petop arena list
 ```
+
+### Battle Arena Setup
+
+1. Stand at the center of your desired battle arena
+2. Run `/petop set battle` — registers a 40-block radius arena
+3. Repeat for multiple arenas if needed
+4. When players accept a battle challenge, they will be teleported to the least-busy arena
+5. After the battle ends, both players are teleported back to their original locations
+
+> If no arenas are registered, battles still work — players simply fight in place.
 
 ---
 
@@ -232,13 +250,14 @@ Quests are tied to your **active pet's progress data** and reset automatically o
 - [x] Particle effects on every skill
 - [x] Mystery Egg — hatch a random pet
 - [x] Multi-pet slot GUI with pet switching
+- [x] Battle Arena System with teleportation
+- [x] Production-grade audit (ConcurrentHashMap, memory leaks, null safety)
+- [x] GlobalTickRunnable for 200+ player servers
 - [ ] Pet evolution at level 50
-- [ ] Multiple pet slots (full mechanics)
 - [ ] Pet items & accessories (food, held items)
 - [ ] Weekly quest rewards (loot tables)
 - [ ] Database support (SQLite / MySQL via DataManager swap)
-- [ ] Arena teleportation system
-- [ ] Web leaderboard
+- [ ] In-memory data cache with async flush
 
 ---
 

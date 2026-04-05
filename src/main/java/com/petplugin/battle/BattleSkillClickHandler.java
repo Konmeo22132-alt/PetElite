@@ -8,9 +8,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Handles one-shot inventory clicks for the battle skill selection GUI.
@@ -21,7 +21,8 @@ public class BattleSkillClickHandler implements Listener {
 
     private final PetPlugin plugin;
     // player UUID -> their active BattleSession (registered just before GUI opens)
-    private final Map<UUID, BattleSession> pending = new HashMap<>();
+    // AUDIT FIX: ConcurrentHashMap for thread safety
+    private final Map<UUID, BattleSession> pending = new ConcurrentHashMap<>();
 
     public BattleSkillClickHandler(PetPlugin plugin) {
         this.plugin = plugin;
@@ -32,6 +33,11 @@ public class BattleSkillClickHandler implements Listener {
     }
 
     public void unregister(UUID uuid) {
+        pending.remove(uuid);
+    }
+
+    /** AUDIT FIX: cleanup on PlayerQuitEvent. */
+    public void cleanupPlayer(UUID uuid) {
         pending.remove(uuid);
     }
 
@@ -72,8 +78,14 @@ public class BattleSkillClickHandler implements Listener {
         pending.remove(uuid);
         player.closeInventory();
 
+        // AUDIT FIX: Folia-safe scheduler call
         final int finalGlobalSlot = globalSlot;
-        plugin.getServer().getScheduler().runTask(plugin, () ->
-                session.applySkill(player, finalGlobalSlot));
+        if (com.petplugin.util.FoliaUtil.IS_FOLIA) {
+            player.getScheduler().run(plugin, task ->
+                    session.applySkill(player, finalGlobalSlot), null);
+        } else {
+            plugin.getServer().getScheduler().runTask(plugin, () ->
+                    session.applySkill(player, finalGlobalSlot));
+        }
     }
 }

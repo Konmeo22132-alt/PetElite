@@ -28,19 +28,43 @@ Paper 1.21.x plugin. Hệ thống pet cho server economy: chọn pet → progres
 [x] pet/PetRespawnManager.java
 [x] util/ module
 
-### v1.0.2 Task Status
-[x] TASK 1 — Folia Support: Created FoliaUtil, migrated all BukkitRunnable usages to Folia-compatible schedulers across all managers and entities.
-[x] TASK 2 — Turtle Rendering: Implemented fallback to direct position lerp on Turtle entity. Added global respawn loop to PetManager.run() for unloaded entities.
-[x] TASK 3 — Rank-up Pet Slot Unlock: Validate slots on join, GUI sync/logs.
-[x] TASK 4 — Rank GUI Error Handling: Global fail-safes and specific inventory try-catch block implemented.
-[x] TASK 5 — Multi-GUI Bug Exploits: Unified BaseGUI class, single GUIListener intercepting all inventory clicks.
-[x] TASK 6 — Basic Attack: Updated scheduler for Folia compatibility.
-[x] TASK 7 — Pet Follow Rework: GroundPet/FloatPet Folia-safe self-ticking, 2-block lerp per tick follow logic.
-[x] TASK 8 — Production Hardening: Atomic YAML saves via Bukkit AsyncScheduler, chunk entity cap > 100 check in PetManager.summon(), added /pet reload command.
-[x] TASK 9 — Versioning: Updated pom.xml to 1.0.2, plugin.yml with folia-supported: true.
+### v1.0.3 Task Status (2026-04-05)
+[x] TASK 1 — Full Codebase Audit:
+  - Thread safety: ConcurrentHashMap migrated for BattleManager, ArenaManager, TurnManager, BattleSkillClickHandler, BasicAttackHandler, MysteryEggListener, PetMainGUI
+  - Null safety: EloManager.calculate() null guard, all sendMessage guarded with isOnline()
+  - Memory leaks: All per-player maps (lastAttack, cooldowns, awaitingName, pending, statusEffects) cleaned on PlayerQuitEvent
+  - Performance: O(1) entityId→owner reverse lookup in PetManager, async InventorySnapshot.saveToDisk()
+  - Battle fix: checkWin() now uses hpA/hpB<=0, all scheduled tasks cancelled on end()
+  - Folia safety: BattleSkillClickHandler, PetSelectorGUI, PetMainGUI rename fixed
+[x] TASK 2 — Battle Arena System:
+  - ArenaManager complete rewrite: registration, persistence, load balancing, teleportation
+  - /petop set battle, /petop arena list, /petop arena remove commands
+  - 3-second countdown with Blindness + Slowness IV
+  - Boundary enforcement via GlobalTickRunnable (10 tick interval)
+  - Post-battle cleanup: teleport-back, potion clear, arena count decrement
+[x] TASK 3 — Production Readiness (200+ Players):
+  - GlobalTickRunnable: single centralized tick replaces FloatPet/GroundPet self-ticking
+  - PetManager: tick() called by GlobalTickRunnable, O(1) scheduler overhead
+  - config.yml: arena_max_concurrent_battles, particle_cull_radius, data_flush_interval_seconds  
+  - PetRespawnManager: non-Folia particle runnable now properly cancelled after 20 ticks
+[x] TASK 4 — Release v1.0.3:
+  - pom.xml, plugin.yml updated
+  - AGENT.md, README.md updated
+  - Git commit + tag + push
 
-**Last completed:** 2026-04-05 v1.0.2 Production Hardening.
-**Next task:** Post-release monitoring, Pet evolution (placeholder), SQL DB transition.
+### v1.0.2 Task Status
+[x] TASK 1 — Folia Support
+[x] TASK 2 — Turtle Rendering
+[x] TASK 3 — Rank-up Pet Slot Unlock
+[x] TASK 4 — Rank GUI Error Handling
+[x] TASK 5 — Multi-GUI Bug Exploits
+[x] TASK 6 — Basic Attack
+[x] TASK 7 — Pet Follow Rework
+[x] TASK 8 — Production Hardening
+[x] TASK 9 — Versioning
+
+**Last completed:** 2026-04-05 v1.0.3 Arena System + Full Audit + 200+ Player Optimization.
+**Next task:** Pet evolution (placeholder), SQL DB transition, in-memory PlayerData cache with async flush.
 
 ---
 
@@ -50,22 +74,25 @@ Paper 1.21.x plugin. Hệ thống pet cho server economy: chọn pet → progres
 ```
 com.petplugin/
 ├── PetPlugin.java
-├── pet/        FloatPet (Display Entity), GroundPet (Pathfinding), PetType enum
+├── pet/        FloatPet (Turtle Entity), GroundPet (Pathfinding), GlobalTickRunnable, PetManager
 ├── skill/      SkillTree, SkillBranch (ATK/DEF/HEAL), Skill, StatusEffect
 ├── quest/      DailyQuest, WeeklyQuest, QuestTracker, QuestResetScheduler
-├── battle/     BattleSession, TurnManager, BookSkillHandler, EloManager
+├── battle/     BattleSession, TurnManager, BookSkillHandler, EloManager, ArenaManager
 ├── data/       PlayerData, PetData, DataManager (interface), YamlDataManager
-├── gui/        PetSelectGUI, PetMainGUI, SkillTreeGUI, QuestGUI, RankGUI
-├── listener/   PlayerListener, PetInteractListener, BattleListener
-└── util/       ChatUtil, GuiUtil
+├── gui/        PetSelectGUI, PetMainGUI, SkillTreeGUI, QuestGUI, RankGUI, PetSelectorGUI
+├── listener/   PlayerListener, PetInteractListener, BattleListener, BasicAttackHandler, MysteryEggListener
+└── util/       ChatUtil, GuiUtil, FoliaUtil, LangManager
 ```
 
 ### Key Design Decisions
 1. **DataManager là interface** — impl hiện tại là YamlDataManager, sau swap sang SQLite/MySQL không cần sửa code khác
-2. **FloatPet dùng Display Entity + lerp** — không dùng ArmorStand, không dùng Shulker
-3. **Battle book = skill interface** — mỗi page 1 skill, click page = dùng skill, detect qua `PlayerInteractEvent` với item type WRITTEN_BOOK
+2. **FloatPet dùng Turtle Entity + lerp** — không dùng ArmorStand, không dùng Shulker
+3. **Battle uses 27-slot chest GUI** — book is reference card only, skills selected via inventory click
 4. **PP không hồi trong trận** — resource management hoàn toàn
 5. **Status effect hoạt động cả trong lẫn ngoài battle** — StatusEffectManager tick độc lập
+6. **GlobalTickRunnable (v1.0.3)** — single centralized tick loop replaces per-entity scheduling. O(1) scheduler overhead for n players. Each PetEntity.tick() method remains callable for fallback.
+7. **ConcurrentHashMap everywhere** — all shared-state maps are thread-safe for Folia region thread access
+8. **Arena system** — ArenaManager handles registration, load balancing, teleportation, countdown, boundary enforcement. Falls back to in-place battle if no arena registered.
 
 ---
 
@@ -109,8 +136,14 @@ UUID activePetId
 | CAT | Ground | 80 | 12 | 8 | +1/+0/+2 per level |
 
 ### Locomotion
-- **FloatPet:** Display Entity, lerp Y mỗi tick, target Y = player.y + 1.2, float animation ±0.1 block
-- **GroundPet:** Spawn actual mob entity với custom AI, follow player trong radius 10
+- **FloatPet:** Turtle entity, lerp Y mỗi tick, target Y = player.y + 1.2, float animation ±0.1 block
+- **GroundPet:** Spawn actual mob entity với custom AI off, follow player via manual lerp
+
+### GlobalTickRunnable (v1.0.3)
+- Single runnable registered on plugin enable
+- Calls `PetManager.tick()` which iterates all active pets and calls `PetEntity.tick()` on each
+- Also checks arena boundaries every 10 ticks
+- FloatPet/GroundPet no longer self-tick — removed `startTickLoop()` and `cancelTickLoop()`
 
 ---
 
@@ -139,45 +172,47 @@ STUN   → CRIT_MAGIC particle → battle: skip turn | outside: Slowness III 3s
 ## Quest System
 
 ### Daily (reset 00:00)
-- `MINE_ORE` target=32 → listen BlockBreakEvent, check ore tag
-- `WALK_BLOCKS` target=500 → listen PlayerMoveEvent, accumulate distance
-- `KILL_PLAYERS` target=3 → listen PlayerDeathEvent, check killer
+- `MINE_ORE` target=32
+- `WALK_BLOCKS` target=500
+- `KILL_PLAYERS` target=3
 
 ### Weekly (reset Monday 00:00)
-- `KILL_BOSS` target=2 → EntityDeathEvent, check WITHER / ELDER_GUARDIAN
-- `WIN_BATTLES` target=5 → BattleSession end callback
-- `LONG_JOURNEY` target=5000 → accumulate từ PlayerMoveEvent
-- `CRAFT_RARE` target=10 → CraftItemEvent, check rare item list
-- `JOIN_EVENTS` target=3 → manual call từ event system server
-
-### Reset Logic
-QuestResetScheduler chạy BukkitRunnable mỗi phút, check epoch time so với lastReset.
+- `KILL_BOSS` target=2
+- `WIN_BATTLES` target=5
+- `LONG_JOURNEY` target=5000
+- `CRAFT_RARE` target=10
+- `JOIN_EVENTS` target=3
 
 ---
 
 ## Battle System
 
-### Flow
+### Flow (v1.0.3)
 ```
 /petbattle challenge <player>
   → target /petbattle accept
-  → cả 2 chọn pet (GUI)
+  → ArenaManager.findAvailableArena()
+    → if arena available: teleport + 3s countdown (Blindness + Slowness IV)
+    → if no arena: in-place battle (freeze only)
   → BattleSession.start()
-    → snapshot inventory
-    → clear inventory
-    → give skill book
-    → show BossBar (HP cả 2 pet)
-  → TurnManager.nextTurn()
-    → wait PlayerInteractEvent với WRITTEN_BOOK
-    → BookSkillHandler.parseSkill(page)
-    → apply damage/effect
-    → check win condition
-    → swap turn
+    → snapshot inventory, clear, give skill book
+    → show BossBar
+  → Turn-based combat via BattleSkillClickHandler
+    → checkWin() uses hpA/hpB <= 0 (NOT petData.isFainted())
   → BattleSession.end(winner)
-    → restore inventory
-    → EloManager.calculate()
-    → give rank reward nếu lên rank
-    → cleanup
+    → restore inventory, ELO calc, rank reward
+    → if in arena: ArenaManager.cleanupBattle() (teleport back, remove effects)
+    → cancel all scheduled regen/berserker tasks
+```
+
+### Arena System (v1.0.3)
+```
+/petop set battle       — register arena at current location (40 block radius)
+/petop arena list       — list all registered arenas with active battle counts
+/petop arena remove <id> — remove arena
+
+Arena selection: find arena with lowest active battle count that has capacity
+Capacity: min(radius/10, config arena_max_concurrent_battles)
 ```
 
 ### ELO Formula
@@ -198,72 +233,34 @@ NETHERITE: 5000+
 
 ---
 
-## GUI Notes
-- Tất cả GUI dùng `Bukkit.createInventory()` với custom title
-- GuiUtil.buildItem() helper để tạo ItemStack nhanh với display name + lore
-- Shift+click vào pet entity detect qua `PlayerInteractEntityEvent` + check sneaking
-
----
-
 ## Known Issues / Watch Out
 
-### ✅ Fixed in 2026-04-04 bug-fix pass
-- **BattleSession.end() NPE on null winner:** `winner.getName()` was called unconditionally even though `winner` can be null (both-offline edge case). Now guarded with null check; ELO only calculated when winner != null.
-- **BattleSession disconnect crash:** `playerA.hideBossBar()` / `sendMessage()` crashed on offline player. All calls now guarded with `isOnline()` checks.
-- **BattleSession.forfeit() offline winner:** If the opposing player was also offline, `end()` was passed an offline Player as winner. Now passes `null` when winner is offline, resulting in a draw.
-- **BattleSession.broadcast() crash after disconnect:** All `sendMessage()` calls in `broadcast()` are now guarded with `isOnline()`.
-- **PetData.addExp() single level-up:** Large EXP rewards (e.g. quest completion) only triggered one level-up even if the total crossed multiple thresholds. Fixed to loop until EXP is exhausted or level cap reached.
-- **EloManager.grantRankReward() COAL case:** COAL is the default starting rank — players can never "rank up" to it, so awarding a bonus was unreachable dead code. Changed to COPPER (first real promotion).
-- **StatusEffectManager.findEntity() O(n²) per tick:** Iterated all worlds × all living entities every tick to find an entity by UUID. Replaced with Paper API `Bukkit.getEntity(UUID)` which is O(1).
-- **PetManager stale entry leak:** FloatPet.tick() calls `despawn()` on owner logout but does NOT remove itself from `PetManager.activePets`, causing permanent stale entries. PetManager.run() now uses an iterator to clean up despawned pets whose owner is offline.
-- **QuestResetScheduler unused variables:** Dead `midnight` and `monday` ZonedDateTime locals were computed but never used. Removed.
+### ✅ Fixed in v1.0.3
+- **BattleSession.checkWin() used petData.isFainted():** This was wrong — battle HP is tracked separately in hpA/hpB, not in PetData. petData.isFainted() is for world faint state only. Fixed to check `hpA <= 0` / `hpB <= 0`.
+- **Scheduled regen/berserker tasks not cancelled:** `BattleSession.activeScheduled` list was never cleaned. Now explicitly cancelled in `end()`.
+- **8 classes using non-thread-safe HashMap/HashSet:** All migrated to ConcurrentHashMap.
+- **5 per-player maps never cleaned on quit:** All cleaned via `cleanupPlayer(UUID)` methods on PlayerQuitEvent.
+- **PetRespawnManager particle BukkitRunnable:** Non-Folia path never cancelled after 20 ticks. Now tracked and auto-cancelled.
+- **InventorySnapshot.saveToDisk() synchronous:** Moved to async, errors logged instead of swallowed.
+- **PetManager.isPetEntity()/getOwnerOf() O(n):** Added reverse lookup map `entityId→ownerUUID` for O(1) checks.
+- **BattleSkillClickHandler/PetSelectorGUI/PetMainGUI not Folia-safe:** All migrated to FoliaUtil branching.
 
-### ⚠️ Still active / not yet tested
-- **Float pet despawn:** Display Entity UUID is not persisted in PetData (no restart recovery). If server restarts while pet is out, the entity is gone but PetData has no record of it — normal summon flow re-creates it on next `/petsummon`.
-- **Quest progress persist:** Quest progress is saved to YAML on every `increment()` call — no batching. High-frequency events like `WALK_BLOCKS` trigger a disk write every block moved. Consider debouncing saves.
-- **Book input spam:** BattleSkillClickHandler `pending` map prevents double-triggers within a session but the map is never cleaned up if a player closes the skill GUI without clicking. Entry stays until the battle ends and the session is GC'd — no functional bug, just a minor leak within the session lifetime.
-- **Particle names (Paper 1.21):** `CRIT_MAGIC` → `ENCHANTED_HIT`, không có `SEA_TURTLE_EGG` dùng `TURTLE_EGG`
-- **PlayerDeathEvent package:** nằm ở `org.bukkit.event.entity`, KHÔNG phải `org.bukkit.event.player`
-- **Battle skill selection:** Book page click không expose page number trực tiếp qua API → dùng 27-slot chest GUI thay thế. Book chỉ là reference card. `BattleSkillClickHandler` encode globalSlot vào lore dòng `§8GlobalSlot:X` để parse.
-- **FloatPet material:** Dùng `TURTLE_EGG` BlockDisplay (0.7x scale). Có thể đổi sang `BlockDisplay` khác sau.
-- **GroundPet:** Spawn thực thể Wolf/Cat, tame cho owner → dùng vanilla follow AI. Có thể bị tấn công bởi mob khác — cần thêm invulnerable flag hoặc heal logic sau.
-
-### ✅ Fixed in 1.0.1 (2026-04-04 v1.0.1 patch)
-- **FloatPet (Turtle) not rendering:** Added explicit `setInvisible(false)` in spawn consumer lambda. Added debug logs on spawn and first tick. Turtle spawning confirmed via console log `[FloatPet] Spawned FloatPet for <player>`.
-- **Rank slot not unlocking on rank-up:** `EloManager.grantRankReward()` now uses `slotGranted` boolean flag, saves PlayerData AFTER incrementing slots, and sends explicit `★ Slot pet mới được mở khoá!` message with new slot count.
-- **Rank GUI crash:** Wrapped `rankGUI.open(player)` in `PetPlugin.handleBattleCommand()` with try-catch, logs full stack trace to console.
-- **Items can be taken from QuestGUI:** Added `@EventHandler onInventoryClick` and `onInventoryDrag` to `QuestGUI` class cancelling all events when title matches. Same applied to `RankGUI`.
-- **FloatPet follow improved:** lerp factor now 0.3 per tick when dist > 2 (was flat 0.12). Snap >10 blocks. Faces player yaw.
-- **GroundPet follow reworked:** AI fully disabled (`setAI(false)`) in spawn(). `tick()` uses manual lerp 0.3/tick (dist > 2) or hard snap (dist > 10). No pathfinder calls.
-- **BasicAttackHandler added:** New `listener/BasicAttackHandler.java`. Triggers on `EntityDamageByEntityEvent` when pet owner does melee damage. Pet dashes to target offset (0.5 blocks from face), CRIT × 6 particles, 25% base ATK bonus damage, `ENTITY_PLAYER_ATTACK_STRONG` sound (pitch 1.2). Returns after 6 ticks. 2s cooldown. Skips: in battle, fainted, hidden, target is pet.
-
-### ⚠️ New edge cases to watch (v1.0.1)
-- **BasicAttackHandler cooldown map leak:** `lastAttack` map in `BasicAttackHandler` is never cleaned up when player quits. Minor memory leak; entries expire naturally after 2s. Consider clearing on PlayerQuitEvent for cleanliness.
-- **GroundPet AI-off during respawn:** If GroundPet auto-respawns (tick finds entity invalid), the new entity also gets `setAI(false)` via `spawn()`. Confirmed correct.
-- **FloatPet `setInvisible(false)` note:** The Paper 1.21 `Turtle` entity requires the flag to be set INSIDE the spawn consumer lambda (before entity is added to world). Already done.
-- **GroundPet teleport-every-tick:** Teleporting ground mobs every tick may cause visual jitter on high-ping clients. Consider throttling to every 2-3 ticks if reported.
-
-- **FloatPet entity change:** No longer uses BlockDisplay. Now spawns a real `Turtle` entity (`EntityType.TURTLE`) with `setAI(false)`, `setSilent(true)`, `setInvulnerable(true)`, `setPersistent(true)`, `setGravity(false)`, `setAdult()`. Position lerped + float animation applied by calling `teleport()` each tick exactly like before.
-- **FloatPet.getTurtleEntity():** Renamed from `getDisplay()`. PetManager updated to call `getTurtleEntity()` in `isPetEntity()` and `getOwnerOf()`.
-- **GroundPet safety flags:** Wolf and Cat now also get `setInvulnerable(true)`, `setPersistent(true)`, `setSilent(true)` on spawn.
-- **Paper API note:** `Ageable.setBaby(boolean)` does NOT exist — use `setAdult()` to force adult state or `setBaby()` (no-arg) to force baby. This is a Paper/Bukkit quirk.
-- **MysteryEggListener rewrite:** 5-phase slot-machine animation (intervals: 1/2/4/6/10 ticks per switch), total 90 ticks. Spin shown via `sendActionBar()`. Final reveal via `sendTitle()` with type colour. Sound: `UI_BUTTON_CLICK` (pitch 1.5 fast → descending 1.4/1.2/1.0/0.8 slow), `ENTITY_PLAYER_LEVELUP` on reveal.
-- **`/pet set rank` command:** Sets both `rank` and `elo` to `tier.getMinElo()`. OP-only. Saves via `dataManager.savePlayer()`.
-- **`/pet set level` command:** Sets `pet.level` directly. If new level > old level, grants `(diff * type.getXxxGain())` extra points to each branch. Does NOT reset already-unlocked skills.
-- **`/pet set exp` command:** Sets `currentExp=0` then calls `pet.addExp(amount)` which triggers the full level-up loop.
-- **Tab completion:** `onTabComplete()` override in PetPlugin. `/pet` → recall/egg (+ set if OP). `/pet set` → rank/level/exp. `/pet set rank/level/exp <player>` → online players. `/pet set rank <player>` → tier names. `/pet set level <player>` → preset levels. `/petbattle` → challenge/accept/surrender/rank. `/petbattle challenge` → online players (excluding self).
-
-
+### ⚠️ Still active / deferred to v1.1
+- **BattleSession stores direct Player references:** Should be UUID-based. Deferred to v1.1 due to massive blast radius (~50 lines). All Player accesses now guarded with `isOnline()`.
+- **Quest progress YAML writes:** QuestTracker.increment() → savePet() on every single quest event. WALK_BLOCKS fires every block. Need in-memory cache with periodic flush. (partially addressed by SaveAll pattern).
+- **Float pet entity not persisted:** If server restarts while pet is out, entity lost. Normal summon flow re-creates.
+- **GlobalTickRunnable fallback:** If global tick fails (exception), all pets stop. Monitor for any tick() exceptions in production. If regression detected, revert to self-ticking and note in AGENT.md.
 
 ---
 
 ## Open Items (chưa implement, không được tự ý implement)
 - [ ] Pet evolution (level 50) — placeholder method `onEvolve()` thôi
-- [ ] Multiple pet slot mechanics
 - [ ] Pet items (food, accessory)
 - [ ] Weekly quest rewards cụ thể
-- [ ] Swap YAML → DB
-- [ ] Arena teleport (tạm freeze tại chỗ trước)
+- [ ] Swap YAML → SQL DB (DataManager interface ready)
+- [ ] In-memory PlayerData/PetData cache with async flush (partially planned in v1.0.3)
+- [x] ~~Arena teleport~~ — Implemented in v1.0.3
+- [x] ~~Multiple pet slot mechanics~~ — Implemented (PetSelectorGUI)
 
 ---
 

@@ -5,12 +5,14 @@ package com.petplugin.pet;
  */
 public enum PetType {
 
-    //         HP   ATK  DEF  atkGain  defGain  healGain  locomotion
-    TURTLE(100,   8,  20,      0,       2,        1,    LocomotionType.FLOAT),
-    WOLF  ( 80,  20,  10,      2,       1,        0,    LocomotionType.GROUND),
-    CAT   ( 80,  12,   8,      1,       0,        2,    LocomotionType.GROUND);
+    // HP ATK DEF atkGain defGain healGain locomotion
+    TURTLE(100, 8, 20, 0, 2, 1, LocomotionType.FLOAT),
+    WOLF(80, 20, 10, 2, 1, 0, LocomotionType.GROUND),
+    CAT(80, 12, 8, 1, 0, 2, LocomotionType.GROUND);
 
-    public enum LocomotionType { FLOAT, GROUND }
+    public enum LocomotionType {
+        FLOAT, GROUND
+    }
 
     private final int baseHp;
     private final int baseAtk;
@@ -32,27 +34,47 @@ public enum PetType {
         this.locomotion = locomotion;
     }
 
-    public int getBaseHp()       { return baseHp; }
-    public int getBaseAtk()      { return baseAtk; }
-    public int getBaseDef()      { return baseDef; }
-    public int getAtkGain()      { return atkGain; }
-    public int getDefGain()      { return defGain; }
-    public int getHealGain()     { return healGain; }
-    public LocomotionType getLocomotion() { return locomotion; }
+    public int getBaseHp() {
+        return baseHp;
+    }
+
+    public int getBaseAtk() {
+        return baseAtk;
+    }
+
+    public int getBaseDef() {
+        return baseDef;
+    }
+
+    public int getAtkGain() {
+        return atkGain;
+    }
+
+    public int getDefGain() {
+        return defGain;
+    }
+
+    public int getHealGain() {
+        return healGain;
+    }
+
+    public LocomotionType getLocomotion() {
+        return locomotion;
+    }
 
     public String getDisplayName() {
         return switch (this) {
             case TURTLE -> "&aRùa";
-            case WOLF   -> "&cSói";
-            case CAT    -> "&dMèo";
+            case WOLF -> "&cSói";
+            case CAT -> "&dMèo";
         };
     }
 
     public String getRoleDescription() {
         return switch (this) {
-            case TURTLE -> "&7Role: &aTank &7| Máu cao, phòng thủ cao";
-            case WOLF   -> "&7Role: &cDPS &7| Tấn công mạnh, tốc độ nhanh";
-            case CAT   -> "&7Role: &dSupport &7| Hồi phục, hỗ trợ đồng đội";
+            case TURTLE -> "&7Role: &aTank";
+            case WOLF -> "&7Role: &cDPS";
+            case CAT -> "&7Role: &dSupport";
         };
     }
 }

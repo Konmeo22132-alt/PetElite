@@ -9,6 +9,7 @@ import com.petplugin.gui.*;
 import com.petplugin.gui.PetSelectorGUI;
 import com.petplugin.item.MysteryEggItem;
 import com.petplugin.listener.*;
+import com.petplugin.pet.GlobalTickRunnable;
 import com.petplugin.pet.PetManager;
 import com.petplugin.pet.PetRespawnManager;
 import com.petplugin.quest.QuestResetScheduler;
@@ -41,6 +42,11 @@ public final class PetPlugin extends JavaPlugin {
     private QuestResetScheduler questResetScheduler;
     private PetRespawnManager petRespawnManager;
     private LangManager langManager;
+    private GlobalTickRunnable globalTickRunnable;
+
+    // ---- Listeners (stored for cleanup) ----
+    private BasicAttackHandler basicAttackHandler;
+    private MysteryEggListener mysteryEggListener;
 
     // ---- GUI ----
     private PetSelectGUI petSelectGUI;
@@ -71,6 +77,7 @@ public final class PetPlugin extends JavaPlugin {
         questTracker   = new QuestTracker(this);
         questResetScheduler = new QuestResetScheduler(this);
         petRespawnManager = new PetRespawnManager(this);
+        globalTickRunnable = new GlobalTickRunnable(this);
 
         // GUIs
         petSelectGUI = new PetSelectGUI(this);
@@ -79,6 +86,10 @@ public final class PetPlugin extends JavaPlugin {
         questGUI     = new QuestGUI(this);
         rankGUI      = new RankGUI(this);
         petSelectorGUI = new PetSelectorGUI(this);
+
+        // Create listener instances (stored for cleanup)
+        basicAttackHandler = new BasicAttackHandler(this);
+        mysteryEggListener = new MysteryEggListener(this);
 
         // Arena
         ArenaManager.init(this);
@@ -95,23 +106,46 @@ public final class PetPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new PetInteractListener(this),  this);
         getServer().getPluginManager().registerEvents(new BattleListener(this),       this);
         getServer().getPluginManager().registerEvents(new PetDamageListener(this),    this);
-        getServer().getPluginManager().registerEvents(new MysteryEggListener(this),   this);
-        getServer().getPluginManager().registerEvents(new BasicAttackHandler(this),   this); // Task 5
-        // PlayerJoin hook for waitingRespawn & Snapshot recover
+        getServer().getPluginManager().registerEvents(mysteryEggListener,             this);
+        getServer().getPluginManager().registerEvents(basicAttackHandler,             this);
+
+        // AUDIT FIX: comprehensive PlayerQuit + PlayerJoin cleanup handler
         getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
             @org.bukkit.event.EventHandler
             public void onJoin(org.bukkit.event.player.PlayerJoinEvent e) {
                 petRespawnManager.checkWaitingRespawn(e.getPlayer());
-                com.petplugin.battle.InventorySnapshot.restoreIfPresent(e.getPlayer());
+                InventorySnapshot.restoreIfPresent(e.getPlayer());
+            }
+
+            @org.bukkit.event.EventHandler
+            public void onQuit(org.bukkit.event.player.PlayerQuitEvent e) {
+                UUID uuid = e.getPlayer().getUniqueId();
+                // AUDIT FIX: clean up ALL per-player state to prevent memory leaks
+                battleManager.cleanupPlayer(uuid);
+                battleSkillClickHandler.cleanupPlayer(uuid);
+                basicAttackHandler.cleanupPlayer(uuid);
+                mysteryEggListener.cleanupPlayer(uuid);
+                petMainGUI.cleanupPlayer(uuid);
+                statusEffectManager.clearAll(uuid);
+
+                // Save data
+                var pd = dataManager.loadPlayer(uuid);
+                var pet = dataManager.getActivePet(uuid);
+                dataManager.saveAll(pd, pet);
+
+                // Despawn pet entity
+                petManager.recall(e.getPlayer());
             }
         }, this);
 
-        // Start schedulers
-        petManager.start();
+        // TASK 3: Start global tick runnable (replaces per-entity ticks)
+        globalTickRunnable.start();
+
+        // Start remaining schedulers
         statusEffectManager.start();
         questResetScheduler.start();
 
-        getLogger().info("PetPlugin enabled!");
+        getLogger().info("[PetElite] Plugin enabled! v" + getDescription().getVersion());
     }
 
     @Override
@@ -132,7 +166,7 @@ public final class PetPlugin extends JavaPlugin {
             dataManager.saveAll(pd, pet);
         }
 
-        getLogger().info("PetPlugin disabled.");
+        getLogger().info("[PetElite] Plugin disabled.");
     }
 
     // ------------------------------------------------------------------ //
@@ -149,25 +183,23 @@ public final class PetPlugin extends JavaPlugin {
         return switch (command.getName().toLowerCase()) {
             case "pet"       -> handlePetCommand(player, args);
             case "petbattle" -> handleBattleCommand(player, args);
+            case "petop"     -> handlePetOpCommand(player, args);
             default          -> false;
         };
     }
 
     private boolean handlePetCommand(Player player, String[] args) {
-        // /pet egg — give mystery egg item
         if (args.length > 0 && args[0].equalsIgnoreCase("egg")) {
             player.getInventory().addItem(MysteryEggItem.create(this));
             player.sendMessage(ChatUtil.color("&a🥚 Mystery Egg added to your inventory!"));
             return true;
         }
 
-        // /pet recall
         if (args.length > 0 && args[0].equalsIgnoreCase("recall")) {
             petManager.toggle(player);
             return true;
         }
 
-        // /pet reload (Admin only)
         if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
             if (!player.isOp()) {
                 player.sendMessage(ChatUtil.color("&cYou don't have permission to use this command."));
@@ -179,12 +211,10 @@ public final class PetPlugin extends JavaPlugin {
             return true;
         }
 
-        // /pet set {rank|level|exp} <player> <value> — OP only (Task 3)
         if (args.length > 0 && args[0].equalsIgnoreCase("set")) {
             return handleSetCommand(player, args);
         }
 
-        // No active pet → show starter GUI
         var activePet = dataManager.getActivePet(player.getUniqueId());
         if (activePet == null) {
             petSelectGUI.open(player);
@@ -192,6 +222,84 @@ public final class PetPlugin extends JavaPlugin {
             petMainGUI.open(player);
         }
         return true;
+    }
+
+    // ------------------------------------------------------------------ //
+    //  /petop command (TASK 2 — arena management)
+    // ------------------------------------------------------------------ //
+
+    private boolean handlePetOpCommand(Player player, String[] args) {
+        if (!player.isOp()) {
+            player.sendMessage(ChatUtil.color("&cYou don't have permission."));
+            return true;
+        }
+
+        if (args.length == 0) {
+            sendPetOpHelp(player);
+            return true;
+        }
+
+        return switch (args[0].toLowerCase()) {
+            case "set" -> {
+                if (args.length < 2) {
+                    player.sendMessage(ChatUtil.color("&cUsage: /petop set battle"));
+                    yield true;
+                }
+                if (args[1].equalsIgnoreCase("battle")) {
+                    String arenaId = ArenaManager.registerArena(player);
+                    player.sendMessage(ChatUtil.color("&a✦ Arena registered: &f" + arenaId
+                            + " &aat your current location (40 block radius)."));
+                    yield true;
+                }
+                player.sendMessage(ChatUtil.color("&cUsage: /petop set battle"));
+                yield true;
+            }
+            case "arena" -> {
+                if (args.length < 2) {
+                    sendPetOpHelp(player);
+                    yield true;
+                }
+                if (args[1].equalsIgnoreCase("list")) {
+                    var arenas = ArenaManager.getAllArenas();
+                    if (arenas.isEmpty()) {
+                        player.sendMessage(ChatUtil.color("&7No arenas registered."));
+                    } else {
+                        player.sendMessage(ChatUtil.color("&6=== Registered Arenas ==="));
+                        for (var arena : arenas) {
+                            int count = ArenaManager.getActiveBattleCount(arena.getId());
+                            player.sendMessage(ChatUtil.color("&e" + arena.getId()
+                                    + " &7- " + arena.getWorldName()
+                                    + " (" + (int) arena.getX() + "," + (int) arena.getY() + "," + (int) arena.getZ() + ")"
+                                    + " r=" + arena.getRadius()
+                                    + " &a[" + count + "/" + arena.getMaxConcurrentBattles() + " battles]"));
+                        }
+                    }
+                    yield true;
+                }
+                if (args[1].equalsIgnoreCase("remove") && args.length >= 3) {
+                    if (ArenaManager.removeArena(args[2])) {
+                        player.sendMessage(ChatUtil.color("&aArena removed: &f" + args[2]));
+                    } else {
+                        player.sendMessage(ChatUtil.color("&cArena not found: " + args[2]));
+                    }
+                    yield true;
+                }
+                sendPetOpHelp(player);
+                yield true;
+            }
+            default -> {
+                sendPetOpHelp(player);
+                yield true;
+            }
+        };
+    }
+
+    private void sendPetOpHelp(Player player) {
+        player.sendMessage(ChatUtil.color(
+                "&6=== PetOp Commands ===\n"
+                + "&e/petop set battle &7- Register arena at current location\n"
+                + "&e/petop arena list &7- List all arenas\n"
+                + "&e/petop arena remove <id> &7- Remove an arena"));
     }
 
     // ------------------------------------------------------------------ //
@@ -203,7 +311,6 @@ public final class PetPlugin extends JavaPlugin {
             sender.sendMessage(ChatUtil.color("&cYou don't have permission to use this command."));
             return true;
         }
-        // args: ["set", type, player, value]
         if (args.length < 4) {
             sender.sendMessage(ChatUtil.color(
                 "&cUsage: /pet set &e<rank|level|exp> <player> <value>"));
@@ -253,8 +360,6 @@ public final class PetPlugin extends JavaPlugin {
                     sender.sendMessage(ChatUtil.color("&c" + target.getName() + " has no active pet."));
                     return true;
                 }
-                // Grant cumulative skill points for all levels up to target
-                // without resetting already-unlocked skills
                 int currentLevel = pet.getLevel();
                 pet.setLevel(level);
                 pet.setCurrentExp(0);
@@ -281,7 +386,7 @@ public final class PetPlugin extends JavaPlugin {
                     return true;
                 }
                 pet.setCurrentExp(0);
-                pet.addExp(exp); // triggers level-up loop
+                pet.addExp(exp);
                 dataManager.savePet(pet);
                 sender.sendMessage(ChatUtil.color(
                     "&aSet EXP of &e" + target.getName() + "'s pet&a to &e" + exp + "&a (may have leveled up)."));
@@ -320,7 +425,7 @@ public final class PetPlugin extends JavaPlugin {
                 try {
                     rankGUI.open(player);
                 } catch (Exception ex) {
-                    getLogger().severe("[PetPlugin] RankGUI.open() threw an exception for " + player.getName() + ":");
+                    getLogger().severe("[PetElite] RankGUI.open() threw an exception for " + player.getName() + ":");
                     ex.printStackTrace();
                     player.sendMessage(ChatUtil.color("&cLỗi khi mở Rank GUI. Vui lòng báo cáo admin."));
                 }
@@ -343,7 +448,7 @@ public final class PetPlugin extends JavaPlugin {
     }
 
     // ------------------------------------------------------------------ //
-    //  Tab Completion (Task 4 — context-aware)
+    //  Tab Completion
     // ------------------------------------------------------------------ //
 
     @Override
@@ -353,32 +458,25 @@ public final class PetPlugin extends JavaPlugin {
 
         if (cmd.equals("pet")) {
             if (args.length == 1) {
-                // Base subcommands
                 List<String> base = new ArrayList<>(Arrays.asList("recall", "egg"));
                 if (sender.isOp()) {
                     base.add("set");
                     base.add("reload");
                 }
                 filterAndAdd(suggestions, base, args[0]);
-
             } else if (args.length == 2 && args[0].equalsIgnoreCase("set") && sender.isOp()) {
                 filterAndAdd(suggestions, Arrays.asList("rank", "level", "exp"), args[1]);
-
             } else if (args.length == 3 && args[0].equalsIgnoreCase("set") && sender.isOp()) {
-                // Player argument — online players only
                 for (Player p : Bukkit.getOnlinePlayers()) {
                     if (p.getName().toLowerCase().startsWith(args[2].toLowerCase()))
                         suggestions.add(p.getName());
                 }
-
             } else if (args.length == 4 && args[0].equalsIgnoreCase("set") && sender.isOp()) {
-                // Value argument
                 switch (args[1].toLowerCase()) {
                     case "rank"  -> filterAndAdd(suggestions,
                         Arrays.asList("COAL", "COPPER", "IRON", "GOLD", "DIAMOND", "NETHERITE"), args[3]);
                     case "level" -> filterAndAdd(suggestions,
                         Arrays.asList("1", "10", "20", "30", "40", "50"), args[3]);
-                    // exp — no suggestion
                 }
             }
         }
@@ -387,13 +485,28 @@ public final class PetPlugin extends JavaPlugin {
             if (args.length == 1) {
                 filterAndAdd(suggestions,
                     Arrays.asList("challenge", "accept", "surrender", "rank"), args[0]);
-
             } else if (args.length == 2 && args[0].equalsIgnoreCase("challenge")) {
-                // Suggest online players (excluding self)
                 for (Player p : Bukkit.getOnlinePlayers()) {
                     if (sender instanceof Player self && p == self) continue;
                     if (p.getName().toLowerCase().startsWith(args[1].toLowerCase()))
                         suggestions.add(p.getName());
+                }
+            }
+        }
+
+        if (cmd.equals("petop")) {
+            if (args.length == 1) {
+                filterAndAdd(suggestions, Arrays.asList("set", "arena"), args[0]);
+            } else if (args.length == 2) {
+                if (args[0].equalsIgnoreCase("set")) {
+                    filterAndAdd(suggestions, List.of("battle"), args[1]);
+                } else if (args[0].equalsIgnoreCase("arena")) {
+                    filterAndAdd(suggestions, Arrays.asList("list", "remove"), args[1]);
+                }
+            } else if (args.length == 3 && args[0].equalsIgnoreCase("arena") && args[1].equalsIgnoreCase("remove")) {
+                for (var arena : ArenaManager.getAllArenas()) {
+                    if (arena.getId().toLowerCase().startsWith(args[2].toLowerCase()))
+                        suggestions.add(arena.getId());
                 }
             }
         }

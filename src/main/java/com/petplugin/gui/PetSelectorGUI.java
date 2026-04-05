@@ -97,10 +97,16 @@ public class PetSelectorGUI implements Listener {
         pd.setActivePetId(finalPetId);
         plugin.getDataManager().savePlayer(pd);
 
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        // AUDIT FIX: Folia-safe scheduler call
+        Runnable summonTask = () -> {
             plugin.getPetManager().summon(player);
             player.sendMessage(ChatUtil.color("&a✦ Đã chuyển pet!"));
-        });
+        };
+        if (com.petplugin.util.FoliaUtil.IS_FOLIA) {
+            player.getScheduler().run(plugin, task -> summonTask.run(), null);
+        } else {
+            Bukkit.getScheduler().runTask(plugin, summonTask);
+        }
     }
 
     private Material petMaterial(PetData pet) {

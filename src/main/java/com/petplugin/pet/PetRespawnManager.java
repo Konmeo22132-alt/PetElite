@@ -130,7 +130,14 @@ public class PetRespawnManager {
                 if (ticks[0] >= 20) task.cancel();
             }, 1L, 1L);
         } else {
-            Bukkit.getScheduler().runTaskTimer(plugin, particleTask, 0L, 1L);
+            // AUDIT FIX: track and cancel the BukkitRunnable after 20 ticks
+            org.bukkit.scheduler.BukkitTask[] taskHolder = new org.bukkit.scheduler.BukkitTask[1];
+            taskHolder[0] = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+                particleTask.run();
+                if (ticks[0] >= 20 && taskHolder[0] != null) {
+                    taskHolder[0].cancel();
+                }
+            }, 0L, 1L);
         }
     }
 }

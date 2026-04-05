@@ -30,6 +30,13 @@ public class EloManager {
         PlayerData winnerData = plugin.getDataManager().loadPlayer(winner.getUniqueId());
         PlayerData loserData  = plugin.getDataManager().loadPlayer(loser.getUniqueId());
 
+        // AUDIT FIX: null guard on loadPlayer
+        if (winnerData == null || loserData == null) {
+            plugin.getLogger().warning("[PetElite] EloManager.calculate() failed: null PlayerData for "
+                    + (winnerData == null ? winner.getName() : loser.getName()));
+            return;
+        }
+
         int winnerElo = winnerData.getElo();
         int loserElo  = loserData.getElo();
 
